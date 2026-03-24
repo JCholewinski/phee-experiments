@@ -111,12 +111,12 @@ os.makedirs(MODEL_PATH, exist_ok=True)
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 # JSON (łatwy do dalszego użycia)
-metrics_path = os.path.join(MODEL_PATH, f"metrics_{timestamp}.json")
+metrics_path = os.path.join(config["training"]["output_dir"], f"metrics_{timestamp}.json")
 with open(metrics_path, "w") as f:
     json.dump({"f1": f1}, f, indent=2)
 
 # tekstowy raport
-report_path = os.path.join(MODEL_PATH, f"report_{timestamp}.txt")
+report_path = os.path.join(config["training"]["output_dir"], f"report_{timestamp}.txt")
 with open(report_path, "w") as f:
     f.write(report)
 

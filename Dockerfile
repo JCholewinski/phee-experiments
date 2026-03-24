@@ -9,6 +9,7 @@ COPY requirements.txt .
 
 # instalacja paczek
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir huggingface_hub[cli]
 
 # kopiuj cały projekt
 COPY . .

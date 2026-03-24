@@ -7,6 +7,9 @@ from src.preprocessing.tokenize_and_align import tokenize_and_align
 from src.utils.labeling import LABEL_LIST, LABEL2ID, ID2LABEL
 from src.datasets.seq_dataset import load_dataset, build_dataset
 
+from huggingface_hub import upload_folder
+
+
 with open("configs/seq.yaml") as f:
     config = yaml.safe_load(f)
 
@@ -62,3 +65,11 @@ trainer.train()
 
 trainer.save_model(config["training"]["output_dir_final"])
 tokenizer.save_pretrained(config["training"]["output_dir_final"])
+
+create_repo("jcholewinski/sequential_first_model", exist_ok=True)
+
+upload_folder(
+    folder_path=config["training"]["output_dir_final"],
+    repo_id="jcholewinski/sequential_first_model",
+    repo_type="model",
+)
