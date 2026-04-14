@@ -7,7 +7,7 @@ from src.preprocessing.tokenize_and_align import tokenize_and_align
 from src.utils.labeling import LABEL_LIST, LABEL2ID, ID2LABEL
 from src.datasets.seq_dataset import load_dataset, build_dataset
 
-from huggingface_hub import upload_folder
+from huggingface_hub import upload_folder, create_repo
 
 
 with open("configs/seq.yaml") as f:
