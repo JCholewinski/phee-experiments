@@ -5,7 +5,7 @@ training:
   num_train_epochs: 2
   logging_steps: 10
   learning_rate: 5e-5
-  save_strategy: epochs
+  save_strategy: epoch
 
 model:
   name: bert-base-cased
