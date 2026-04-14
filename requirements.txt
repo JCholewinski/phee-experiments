@@ -5,3 +5,4 @@ torch
 accelerate
 seqeval
 pyyaml
+huggingface_hub[cli]
