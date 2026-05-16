@@ -1,2 +1,4 @@
 outputs/seq/final/
-outputs/seq/checkpoint-*/
+outputs/seq/checkpoint-*/.venv/
+outputs/seq/
+.venv/

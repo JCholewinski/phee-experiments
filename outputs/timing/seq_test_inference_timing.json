@@ -1,0 +1,12 @@
+{
+  "method": "sequence_labeling",
+  "split": "test",
+  "num_samples": 725,
+  "total_inference_time_seconds": 6.1398610452597495,
+  "avg_inference_time_seconds": 0.008468773855530689,
+  "median_inference_time_seconds": 0.008056333987042308,
+  "min_inference_time_seconds": 0.007883673999458551,
+  "max_inference_time_seconds": 0.27838444101507775,
+  "model_path": "outputs/seq/final",
+  "device": "cuda"
+}
