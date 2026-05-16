@@ -8,7 +8,7 @@ training:
   save_strategy: epoch
 
 model:
-  name: dmis-lab/biobert-base-cased-v1.1
+  name: bert-base-cased
 
 data:
   train_path: data/raw/train_main.json
