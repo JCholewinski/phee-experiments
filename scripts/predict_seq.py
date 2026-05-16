@@ -49,34 +49,36 @@ def get_split_path(config, split: str) -> str:
     return config["data"][key]
 
 
-def align_predictions_to_words(pred_ids, labels, word_ids):
+def align_predictions_to_words(pred_ids, word_ids, num_words):
     """
-    Convert model predictions from tokenizer/subtoken level back to word level.
+    Convert tokenizer/subtoken-level predictions back to original word-level labels.
 
-    We keep only positions where labels != -100.
-    This matches the same positions used during training/evaluation.
+    For each original word/token, we take the prediction from the first tokenizer
+    token that belongs to this word. This guarantees exactly one prediction per
+    original token.
     """
 
-    pred_labels = []
-    previous_word_id = None
+    word_predictions = [None] * num_words
 
-    for pred_id, label_id, word_id in zip(pred_ids, labels, word_ids):
+    for pred_id, word_id in zip(pred_ids, word_ids):
         if word_id is None:
-            previous_word_id = word_id
             continue
 
-        if label_id == -100:
-            previous_word_id = word_id
+        if word_id < 0 or word_id >= num_words:
             continue
 
-        if word_id == previous_word_id:
-            previous_word_id = word_id
-            continue
+        if word_predictions[word_id] is None:
+            word_predictions[word_id] = ID2LABEL[int(pred_id)]
 
-        pred_labels.append(ID2LABEL[int(pred_id)])
-        previous_word_id = word_id
+    missing = [i for i, label in enumerate(word_predictions) if label is None]
 
-    return pred_labels
+    if missing:
+        raise ValueError(
+            f"Could not align predictions for word indices: {missing}. "
+            f"num_words={num_words}, word_ids={word_ids}"
+        )
+
+    return word_predictions
 
 
 def predict_sample(model, tokenizer, processed_sample, device):
@@ -90,9 +92,12 @@ def predict_sample(model, tokenizer, processed_sample, device):
         pred_ids = torch.argmax(outputs.logits, dim=-1)[0].cpu().tolist()
 
     word_ids = tokenized.word_ids()
-    labels = tokenized["labels"]
 
-    pred_labels = align_predictions_to_words(pred_ids, labels, word_ids)
+    pred_labels = align_predictions_to_words(
+        pred_ids=pred_ids,
+        word_ids=word_ids,
+        num_words=len(processed_sample["tokens"]),
+    )
 
     return pred_labels
 
