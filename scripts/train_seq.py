@@ -32,9 +32,12 @@ dataset = build_dataset(raw_data, convert_sample_to_bio)
 # 3. tokenizer
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=True)
 
+original_columns = dataset.column_names
+
 dataset = dataset.map(
     lambda x: tokenize_and_align(x, tokenizer, LABEL2ID),
-    batched=False
+    batched=False,
+    remove_columns=original_columns,
 )
 
 # 4. model

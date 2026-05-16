@@ -6,3 +6,6 @@ accelerate
 seqeval
 pyyaml
 huggingface_hub[cli]
+tiktoken
+sentencepiece
+protobuf
