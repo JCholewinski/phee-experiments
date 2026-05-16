@@ -137,7 +137,7 @@ def main():
     raw_data = load_jsonl(data_path)
     processed_data = [convert_sample_to_bio(sample) for sample in raw_data]
 
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
     model = AutoModelForTokenClassification.from_pretrained(model_path)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
