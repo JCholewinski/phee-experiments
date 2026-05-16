@@ -1,12 +1,13 @@
 import json
 import yaml
+import os
+import time
+from pathlib import Path
 from transformers import AutoTokenizer, AutoModelForTokenClassification, TrainingArguments, Trainer
-
 from src.preprocessing.to_bio import convert_sample_to_bio
 from src.preprocessing.tokenize_and_align import tokenize_and_align
 from src.utils.labeling import LABEL_LIST, LABEL2ID, ID2LABEL
 from src.datasets.seq_dataset import load_dataset, build_dataset
-
 from huggingface_hub import upload_folder, create_repo
 
 
@@ -61,15 +62,47 @@ trainer = Trainer(
     processing_class=tokenizer
 )
 
+start_time = time.perf_counter()
+
 trainer.train()
+
+end_time = time.perf_counter()
+training_time_seconds = end_time - start_time
+
+timing_output_path = Path("outputs/metrics/seq_training_time.json")
+timing_output_path.parent.mkdir(parents=True, exist_ok=True)
+
+with open(timing_output_path, "w", encoding="utf-8") as f:
+    json.dump(
+        {
+            "method": "sequence_labeling",
+            "training_time_seconds": training_time_seconds,
+            "training_time_minutes": training_time_seconds / 60,
+            "num_train_samples": len(dataset),
+            "num_epochs": training_args.num_train_epochs,
+            "model_name": config["model"]["name"],
+        },
+        f,
+        indent=2,
+        ensure_ascii=False,
+    )
+
+print(f"Training time: {training_time_seconds:.2f} seconds")
 
 trainer.save_model(config["training"]["output_dir_final"])
 tokenizer.save_pretrained(config["training"]["output_dir_final"])
 
-create_repo("jcholewinski/sequential_first_model", exist_ok=True)
+upload_to_hf = os.getenv("UPLOAD_TO_HF", "false").lower() == "true"
 
-upload_folder(
-    folder_path=config["training"]["output_dir_final"],
-    repo_id="jcholewinski/sequential_first_model",
-    repo_type="model",
-)
+if upload_to_hf:
+    create_repo("jcholewinski/sequential_first_model", exist_ok=True)
+
+    upload_folder(
+        folder_path=config["training"]["output_dir_final"],
+        repo_id="jcholewinski/sequential_first_model",
+        repo_type="model",
+    )
+
+    print("Model uploaded to Hugging Face.")
+else:
+    print("Skipping Hugging Face upload because UPLOAD_TO_HF=false.")

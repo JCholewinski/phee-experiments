@@ -13,3 +13,4 @@ model:
 data:
   train_path: data/raw/train_main.json
   test_path: data/raw/test_main.json
+  val_path: data/raw/val_main.json
