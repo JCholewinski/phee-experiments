@@ -1,75 +1,89 @@
 # src/evaluation/bio_to_spans.py
 
-from typing import List, Dict, Any
+def normalize_span_label(raw_label):
+    if raw_label == "ADE_TRIGGER":
+        return "TRIGGER", "ADE"
+
+    if raw_label == "PTE_TRIGGER":
+        return "TRIGGER", "PTE"
+
+    return raw_label, None
 
 
-def bio_to_spans(tokens: List[str], labels: List[str]) -> List[Dict[str, Any]]:
-    """
-    Convert BIO labels into span-level representation.
+def make_span(tokens, raw_label, start_idx):
+    normalized_label, event_type = normalize_span_label(raw_label)
 
-    Example:
-        tokens = ["patient", "received", "aspirin"]
-        labels = ["O", "O", "B-TREATMENT"]
+    span = {
+        "label": normalized_label,
+        "_raw_label": raw_label,
+        "start": start_idx,
+        "end": start_idx,
+        "text": tokens[start_idx],
+    }
 
-    Returns:
-        [
-            {
-                "label": "TREATMENT",
-                "text": "aspirin",
-                "start": 2,
-                "end": 2
-            }
-        ]
-    """
+    if event_type is not None:
+        span["event_type"] = event_type
 
-    if len(tokens) != len(labels):
-        raise ValueError("tokens and labels must have the same length")
+    return span
 
+
+def close_span(span):
+    if span is None:
+        return None
+
+    span = dict(span)
+    span.pop("_raw_label", None)
+    return span
+
+
+def bio_to_spans(tokens, labels):
     spans = []
     current = None
 
-    for i, label in enumerate(labels):
-        if label == "O" or label is None:
-            if current is not None:
-                current["end"] = i - 1
-                current["text"] = " ".join(tokens[current["start"]:current["end"] + 1])
-                spans.append(current)
-                current = None
+    for i, (token, label) in enumerate(zip(tokens, labels)):
+        if label == "O":
+            closed = close_span(current)
+            if closed is not None:
+                spans.append(closed)
+            current = None
             continue
 
         if "-" not in label:
-            raise ValueError(f"Invalid BIO label: {label}")
+            closed = close_span(current)
+            if closed is not None:
+                spans.append(closed)
 
-        prefix, span_label = label.split("-", 1)
+            current = make_span(tokens, label, i)
+            continue
+
+        prefix, raw_label = label.split("-", 1)
 
         if prefix == "B":
-            if current is not None:
-                current["end"] = i - 1
-                current["text"] = " ".join(tokens[current["start"]:current["end"] + 1])
-                spans.append(current)
+            closed = close_span(current)
+            if closed is not None:
+                spans.append(closed)
 
-            current = {
-                "label": span_label,
-                "start": i,
-                "end": i,
-                "text": tokens[i],
-            }
+            current = make_span(tokens, raw_label, i)
 
         elif prefix == "I":
-            if current is None or current["label"] != span_label:
-                current = {
-                    "label": span_label,
-                    "start": i,
-                    "end": i,
-                    "text": tokens[i],
-                }
+            if current is None or current["_raw_label"] != raw_label:
+                closed = close_span(current)
+                if closed is not None:
+                    spans.append(closed)
+
+                current = make_span(tokens, raw_label, i)
+            else:
+                current["end"] = i
+                current["text"] = " ".join(tokens[current["start"]:i + 1])
 
         else:
-            raise ValueError(f"Invalid BIO prefix: {prefix}")
+            closed = close_span(current)
+            if closed is not None:
+                spans.append(closed)
+            current = None
 
-    if current is not None:
-        current["end"] = len(tokens) - 1
-        current["text"] = " ".join(tokens[current["start"]:current["end"] + 1])
-        spans.append(current)
+    closed = close_span(current)
+    if closed is not None:
+        spans.append(closed)
 
     return spans

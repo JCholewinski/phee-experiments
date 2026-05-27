@@ -1,9 +1,18 @@
 LABEL_LIST = [
     "O",
-    "B-TRIGGER", "I-TRIGGER",
-    "B-EFFECT", "I-EFFECT",
-    "B-TREATMENT", "I-TREATMENT"
+
+    "B-ADE_TRIGGER",
+    "I-ADE_TRIGGER",
+
+    "B-PTE_TRIGGER",
+    "I-PTE_TRIGGER",
+
+    "B-EFFECT",
+    "I-EFFECT",
+
+    "B-TREATMENT",
+    "I-TREATMENT",
 ]
 
-LABEL2ID = {l: i for i, l in enumerate(LABEL_LIST)}
-ID2LABEL = {i: l for l, i in LABEL2ID.items()}
+LABEL2ID = {label: idx for idx, label in enumerate(LABEL_LIST)}
+ID2LABEL = {idx: label for label, idx in LABEL2ID.items()}

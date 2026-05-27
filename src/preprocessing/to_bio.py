@@ -1,47 +1,43 @@
 def map_label(label):
+    if label == "Adverse_event":
+        return "ADE_TRIGGER"
 
-    if label.startswith("Adverse_event"):
-        return "TRIGGER"
-    elif label.startswith("Effect"):
+    if label == "Potential_therapeutic_event":
+        return "PTE_TRIGGER"
+
+    if label.startswith("Effect"):
         return "EFFECT"
-    elif label.startswith("Treatment"):
+
+    if label.startswith("Treatment"):
         return "TREATMENT"
-    else:
-        return "O"
+
+    return "O"
 
 
-def convert_sample_to_bio(sample):
+def merge_spans(spans):
+    spans = sorted(spans, key=lambda x: (x["start"], x["end"]))
 
-    tokens = sample["sentence"]
-    labels = ["O"] * len(tokens)
+    merged = []
 
-    for event in sample["event"]:
-        for start, end, label in event:
+    for span in spans:
+        if not merged:
+            merged.append(span)
+            continue
 
-            mapped = map_label(label)
+        last = merged[-1]
 
-            if mapped == "O":
-                continue
+        same_label = last["label"] == span["label"]
+        overlaps_or_touches = span["start"] <= last["end"] + 1
 
-            for i in range(start, end + 1):
-                if i == start:
-                    labels[i] = f"B-{mapped}"
-                else:
-                    labels[i] = f"I-{mapped}"
+        if same_label and overlaps_or_touches:
+            last["end"] = max(last["end"], span["end"])
+        else:
+            merged.append(span)
 
-    tokens, labels = clean_bio_tokens(tokens, labels)
+    return merged
 
-    return {
-        "tokens": tokens,
-        "labels": labels,
-    }
 
 def clean_bio_tokens(tokens, labels):
-    """
-    Remove empty or whitespace-only tokens from BIO representation.
-    Also fixes invalid I-* labels after removal if necessary.
-    """
-
     cleaned_tokens = []
     cleaned_labels = []
 
@@ -81,3 +77,43 @@ def clean_bio_tokens(tokens, labels):
         previous_entity = entity
 
     return cleaned_tokens, fixed_labels
+
+
+def convert_sample_to_bio(sample):
+    tokens = sample["sentence"]
+
+    coarse_spans = []
+
+    for event in sample["event"]:
+        for start, end, raw_label in event:
+            label = map_label(raw_label)
+
+            if label == "O":
+                continue
+
+            coarse_spans.append({
+                "start": start,
+                "end": end,
+                "label": label,
+            })
+
+    coarse_spans = merge_spans(coarse_spans)
+
+    labels = ["O"] * len(tokens)
+
+    for span in coarse_spans:
+        start = span["start"]
+        end = span["end"]
+        label = span["label"]
+
+        labels[start] = f"B-{label}"
+
+        for i in range(start + 1, end + 1):
+            labels[i] = f"I-{label}"
+
+    tokens, labels = clean_bio_tokens(tokens, labels)
+
+    return {
+        "tokens": tokens,
+        "labels": labels,
+    }
