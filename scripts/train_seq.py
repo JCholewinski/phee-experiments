@@ -1,17 +1,31 @@
 import json
 import yaml
 import os
+import argparse ###ADDED###
 import time
 from pathlib import Path
-from transformers import AutoTokenizer, AutoModelForTokenClassification, TrainingArguments, Trainer
+from transformers import AutoTokenizer, AutoModelForTokenClassification, AutoConfig, TrainingArguments, Trainer
 from src.preprocessing.to_bio import convert_sample_to_bio
+from src.models import BertMLPForTokenClassification ###ADDED###
 from src.preprocessing.tokenize_and_align import tokenize_and_align
 from src.utils.labeling import LABEL_LIST, LABEL2ID, ID2LABEL
 from src.datasets.seq_dataset import load_dataset, build_dataset
 from huggingface_hub import upload_folder, create_repo
 
 
-with open("configs/seq.yaml") as f:
+# with open("configs/seq.yaml") as f:
+#     config = yaml.safe_load(f)
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--config",
+    type=str,
+    default="configs/seq.yaml",
+    help="Path to the YAML configuration file.",
+)
+args = parser.parse_args()
+
+with open(args.config, "r", encoding="utf-8") as f:
     config = yaml.safe_load(f)
 
 MODEL_NAME = config["model"]["name"]
@@ -52,8 +66,35 @@ if HEAD_TYPE == "linear":
         MODEL_NAME,
         num_labels=len(LABEL_LIST),
         id2label=ID2LABEL,
-        label2id=LABEL2ID
+        label2id=LABEL2ID,
     )
+
+elif HEAD_TYPE == "mlp":
+    model_config = AutoConfig.from_pretrained(
+        MODEL_NAME,
+        num_labels=len(LABEL_LIST),
+        id2label=ID2LABEL,
+        label2id=LABEL2ID,
+    )
+
+    model_config.mlp_hidden_size = config["model"].get(
+        "mlp_hidden_size",
+        model_config.hidden_size,
+    )
+    model_config.mlp_dropout = config["model"].get(
+        "mlp_dropout",
+        model_config.hidden_dropout_prob,
+    )
+    model_config.mlp_activation = config["model"].get(
+        "mlp_activation",
+        "gelu",
+    )
+
+    model = BertMLPForTokenClassification.from_pretrained(
+        MODEL_NAME,
+        config=model_config,
+    )
+
 else:
     raise ValueError(f"Unsupported head_type: {HEAD_TYPE}")
 

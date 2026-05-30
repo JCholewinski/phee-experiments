@@ -15,6 +15,8 @@ from src.evaluation.bio_to_spans import bio_to_spans
 from src.preprocessing.to_bio import convert_sample_to_bio
 from src.preprocessing.tokenize_and_align import tokenize_and_align
 from src.utils.labeling import ID2LABEL, LABEL2ID
+from transformers import AutoTokenizer, AutoModelForTokenClassification ###ADDED###
+from src.models import BertMLPForTokenClassification ###ADDED###
 
 
 def load_jsonl(path: str):
@@ -126,7 +128,8 @@ def main():
 
     with open(args.config, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
-        head_type = config["model"].get("head_type", "linear") ###ADDED###
+    
+    head_type = config["model"].get("head_type", "linear") ###ADDED###
 
     data_path = get_split_path(config, args.split)
     model_path = args.model_path or config["training"]["output_dir_final"]
@@ -139,7 +142,15 @@ def main():
     processed_data = [convert_sample_to_bio(sample) for sample in raw_data]
 
     tokenizer = AutoTokenizer.from_pretrained(model_path)
-    model = AutoModelForTokenClassification.from_pretrained(model_path)
+    #model = AutoModelForTokenClassification.from_pretrained(model_path)
+    if head_type == "linear":
+        model = AutoModelForTokenClassification.from_pretrained(model_path)
+
+    elif head_type == "mlp":
+        model = BertMLPForTokenClassification.from_pretrained(model_path)
+
+    else:
+        raise ValueError(f"Unsupported head_type: {head_type}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
