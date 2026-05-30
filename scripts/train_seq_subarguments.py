@@ -1,4 +1,5 @@
 import json
+import argparse
 import yaml
 import os
 import time
@@ -14,8 +15,16 @@ from src.utils.subargument_labeling import (
     SUBARGUMENT_ID2LABEL as ID2LABEL,
 )
 
-with open("configs/seq.yaml") as f:
+parser = argparse.ArgumentParser()
+parser.add_argument("--config", default="configs/seq_subarguments.yaml")
+args = parser.parse_args()
+
+with open(args.config, "r", encoding="utf-8") as f:
     config = yaml.safe_load(f)
+
+print(f"Using config: {args.config}")
+print(f"Training output_dir: {config['training']['output_dir']}")
+print(f"Final output_dir: {config['training']['output_dir_final']}")
 
 MODEL_NAME = config["model"]["name"]
 TRAIN_PATH = config["data"]["train_path"]
