@@ -1,0 +1,12 @@
+{
+  "method": "sequence_labeling_subarguments",
+  "split": "test",
+  "num_samples": 725,
+  "total_inference_time_seconds": 9.55760895122512,
+  "avg_inference_time_seconds": 0.013182908898241546,
+  "median_inference_time_seconds": 0.012700285005848855,
+  "min_inference_time_seconds": 0.012328226999670733,
+  "max_inference_time_seconds": 0.3465128480020212,
+  "model_path": "outputs/models/seq_subarguments/final",
+  "device": "cuda"
+}

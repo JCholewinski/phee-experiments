@@ -2,3 +2,14 @@ outputs/seq/final/
 outputs/seq/checkpoint-*/.venv/
 outputs/seq/
 .venv/
+
+# Trained models and checkpoints
+outputs/models/
+outputs/seq/
+outputs/seq_subarguments/
+outputs/**/checkpoint-*/
+outputs/**/final/
+
+# Python cache
+__pycache__/
+*.pyc
