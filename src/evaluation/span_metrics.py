@@ -154,56 +154,58 @@ def compute_trigger_metrics(records):
     pred_event_types = []
 
     for record in records:
+        record_id = record["id"]
+
         gold_spans = record.get("gold_spans", [])
         pred_spans = record.get("pred_spans", [])
 
         gold_triggers = [
             span for span in gold_spans
-            if span["label"] == "TRIGGER"
+            if span.get("label") == "TRIGGER"
         ]
 
         pred_triggers = [
             span for span in pred_spans
-            if span["label"] == "TRIGGER"
+            if span.get("label") == "TRIGGER"
         ]
 
         for span in gold_triggers:
-            gold_trigger_i.append((
-                record["id"],
-                trigger_identification_key(span),
-            ))
-            gold_trigger_c.append((
-                record["id"],
-                trigger_classification_key(span),
-            ))
+            gold_trigger_i.append(
+                (record_id, span["start"], span["end"])
+            )
+
+            gold_trigger_c.append(
+                (
+                    record_id,
+                    span["start"],
+                    span["end"],
+                    span.get("event_type"),
+                )
+            )
+
+            if span.get("event_type") is not None:
+                gold_event_types.append(
+                    (record_id, span.get("event_type"))
+                )
 
         for span in pred_triggers:
-            pred_trigger_i.append((
-                record["id"],
-                trigger_identification_key(span),
-            ))
-            pred_trigger_c.append((
-                record["id"],
-                trigger_classification_key(span),
-            ))
+            pred_trigger_i.append(
+                (record_id, span["start"], span["end"])
+            )
 
-        gold_types = {
-            span.get("event_type")
-            for span in gold_triggers
-            if span.get("event_type") is not None
-        }
+            pred_trigger_c.append(
+                (
+                    record_id,
+                    span["start"],
+                    span["end"],
+                    span.get("event_type"),
+                )
+            )
 
-        pred_types = {
-            span.get("event_type")
-            for span in pred_triggers
-            if span.get("event_type") is not None
-        }
-
-        for event_type in gold_types:
-            gold_event_types.append((record["id"], event_type))
-
-        for event_type in pred_types:
-            pred_event_types.append((record["id"], event_type))
+            if span.get("event_type") is not None:
+                pred_event_types.append(
+                    (record_id, span.get("event_type"))
+                )
 
     return {
         "trigger_identification": compute_set_metrics(
