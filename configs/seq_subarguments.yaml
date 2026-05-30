@@ -1,0 +1,16 @@
+training:
+  output_dir: outputs/models/seq_subarguments
+  output_dir_final: outputs/models/seq_subarguments/final
+  per_device_train_batch_size: 8
+  num_train_epochs: 2
+  logging_steps: 10
+  learning_rate: 0.00005
+  save_strategy: epoch
+
+model:
+  name: bert-base-cased
+
+data:
+  train_path: data/raw/train_main.json
+  test_path: data/raw/test_main.json
+  val_path: data/raw/val_main.json
