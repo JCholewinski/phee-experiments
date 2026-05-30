@@ -1,7 +1,7 @@
 {
   "method": "sequence_labeling",
-  "training_time_seconds": 193.91029487500055,
-  "training_time_minutes": 3.231838247916676,
+  "training_time_seconds": 196.7650814160006,
+  "training_time_minutes": 3.27941802360001,
   "num_train_samples": 3378,
   "num_epochs": 2,
   "model_name": "bert-base-cased"
