@@ -2,11 +2,11 @@
   "method": "sequence_labeling",
   "split": "val",
   "num_samples": 724,
-  "total_inference_time_seconds": 6.773900871980004,
-  "avg_inference_time_seconds": 0.00935621667400553,
-  "median_inference_time_seconds": 0.009011610498419032,
-  "min_inference_time_seconds": 0.008896768966224045,
-  "max_inference_time_seconds": 0.18490631302120164,
+  "total_inference_time_seconds": 9.737468584062299,
+  "avg_inference_time_seconds": 0.013449542243179971,
+  "median_inference_time_seconds": 0.012676312999246875,
+  "min_inference_time_seconds": 0.012391386997478548,
+  "max_inference_time_seconds": 0.385232802000246,
   "model_path": "outputs/seq/final",
   "device": "cuda"
 }
