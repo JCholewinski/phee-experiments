@@ -7,11 +7,14 @@ LABEL_LIST = [
     "B-PTE_TRIGGER",
     "I-PTE_TRIGGER",
 
-    "B-EFFECT",
-    "I-EFFECT",
+    "B-SUBJECT",
+    "I-SUBJECT",
 
     "B-TREATMENT",
     "I-TREATMENT",
+
+    "B-EFFECT",
+    "I-EFFECT",
 ]
 
 LABEL2ID = {label: idx for idx, label in enumerate(LABEL_LIST)}

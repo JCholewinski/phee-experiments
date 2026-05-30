@@ -5,11 +5,14 @@ def map_label(label):
     if label == "Potential_therapeutic_event":
         return "PTE_TRIGGER"
 
-    if label == "Effect":
-        return "EFFECT"
+    if label == "Subject":
+        return "SUBJECT"
 
     if label == "Treatment":
         return "TREATMENT"
+
+    if label == "Effect":
+        return "EFFECT"
 
     return "O"
 
