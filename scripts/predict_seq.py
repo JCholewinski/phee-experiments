@@ -126,13 +126,14 @@ def main():
 
     with open(args.config, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
+        head_type = config["model"].get("head_type", "linear") ###ADDED###
 
     data_path = get_split_path(config, args.split)
     model_path = args.model_path or config["training"]["output_dir_final"]
 
     output_path = args.output_path
     if output_path is None:
-        output_path = f"outputs/predictions/seq_{args.split}.jsonl"
+        output_path = f"outputs/predictions/seq_{head_type}_{args.split}.jsonl" ###ADDED###
 
     raw_data = load_jsonl(data_path)
     processed_data = [convert_sample_to_bio(sample) for sample in raw_data]
@@ -188,7 +189,8 @@ def main():
     total_time = sum(sample_times)
 
     timing = {
-        "method": "sequence_labeling",
+        "method": f"sequence_labeling_{head_type}", ###ADDED###
+        "head_type": head_type, ###ADDED###
         "split": args.split,
         "num_samples": len(sample_times),
         "total_inference_time_seconds": total_time,
@@ -200,7 +202,7 @@ def main():
         "device": str(device),
     }
 
-    timing_output_path = Path(f"outputs/timing/seq_{args.split}_inference_timing.json")
+    timing_output_path = Path(f"outputs/timing/seq_{head_type}_{args.split}_inference_timing.json") ###ADDED###
     timing_output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(timing_output_path, "w", encoding="utf-8") as f:

@@ -15,6 +15,7 @@ with open("configs/seq.yaml") as f:
     config = yaml.safe_load(f)
 
 MODEL_NAME = config["model"]["name"]
+HEAD_TYPE = config["model"].get("head_type", "linear") ###ADDED###
 TRAIN_PATH = config["data"]["train_path"]
 
 # 1. load data
@@ -37,13 +38,24 @@ dataset = dataset.map(
     batched=False
 )
 
+# # 4. model
+# model = AutoModelForTokenClassification.from_pretrained(
+#     MODEL_NAME,
+#     num_labels=len(LABEL_LIST),
+#     id2label=ID2LABEL,
+#     label2id=LABEL2ID
+# )
+
 # 4. model
-model = AutoModelForTokenClassification.from_pretrained(
-    MODEL_NAME,
-    num_labels=len(LABEL_LIST),
-    id2label=ID2LABEL,
-    label2id=LABEL2ID
-)
+if HEAD_TYPE == "linear":
+    model = AutoModelForTokenClassification.from_pretrained(
+        MODEL_NAME,
+        num_labels=len(LABEL_LIST),
+        id2label=ID2LABEL,
+        label2id=LABEL2ID
+    )
+else:
+    raise ValueError(f"Unsupported head_type: {HEAD_TYPE}")
 
 # 5. training
 training_args = TrainingArguments(
@@ -75,12 +87,13 @@ timing_output_path.parent.mkdir(parents=True, exist_ok=True)
 with open(timing_output_path, "w", encoding="utf-8") as f:
     json.dump(
         {
-            "method": "sequence_labeling",
+            "method": f"sequence_labeling_{HEAD_TYPE}", ###ADDED###
             "training_time_seconds": training_time_seconds,
             "training_time_minutes": training_time_seconds / 60,
             "num_train_samples": len(dataset),
             "num_epochs": training_args.num_train_epochs,
             "model_name": config["model"]["name"],
+            "head_type": HEAD_TYPE, ###ADDED###
         },
         f,
         indent=2,

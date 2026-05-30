@@ -9,6 +9,7 @@ training:
 
 model:
   name: bert-base-cased
+  head: linear ###ADDED###
 
 data:
   train_path: data/raw/train_main.json
