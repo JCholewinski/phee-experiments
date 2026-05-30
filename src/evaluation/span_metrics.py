@@ -24,6 +24,7 @@ def precision_recall_f1(tp, fp, fn):
 
 def span_key(span):
     return (
+        span.get("record_id"),
         span["label"],
         span["start"],
         span["end"],
@@ -45,9 +46,6 @@ def trigger_classification_key(span):
         span["start"],
         span["end"],
     )
-
-def span_key(span: Dict[str, Any]) -> Tuple[str, int, int]:
-    return span["label"], span["start"], span["end"]
 
 
 def safe_divide(a: int, b: int) -> float:
@@ -100,8 +98,8 @@ def compute_span_metrics(
     per_label = {}
 
     for label in labels:
-        gold_label_set = {s for s in gold_set if s[0] == label}
-        pred_label_set = {s for s in pred_set if s[0] == label}
+        gold_label_set = {s for s in gold_set if s[1] == label}
+        pred_label_set = {s for s in pred_set if s[1] == label}
 
         label_tp = len(gold_label_set & pred_label_set)
         label_fp = len(pred_label_set - gold_label_set)
@@ -114,14 +112,36 @@ def compute_span_metrics(
         "per_label": per_label,
     }
 
+def add_record_id_to_spans(spans, record_id):
+    spans_with_id = []
 
-def compute_dataset_metrics(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    for span in spans:
+        span_copy = dict(span)
+        span_copy["record_id"] = record_id
+        spans_with_id.append(span_copy)
+
+    return spans_with_id
+
+def compute_dataset_metrics(records):
     all_gold = []
     all_pred = []
 
     for record in records:
-        all_gold.extend(record.get("gold_spans", []))
-        all_pred.extend(record.get("pred_spans", []))
+        record_id = record["id"]
+
+        all_gold.extend(
+            add_record_id_to_spans(
+                record.get("gold_spans", []),
+                record_id,
+            )
+        )
+
+        all_pred.extend(
+            add_record_id_to_spans(
+                record.get("pred_spans", []),
+                record_id,
+            )
+        )
 
     metrics = compute_span_metrics(all_gold, all_pred)
 
