@@ -14,9 +14,10 @@ from transformers import AutoModelForTokenClassification, AutoTokenizer
 from src.evaluation.bio_to_spans import bio_to_spans
 from src.preprocessing.to_bio import convert_sample_to_bio
 from src.preprocessing.tokenize_and_align import tokenize_and_align
+from src.preprocessing.tokenize_and_align_crf import tokenize_and_align_crf ###ADDED###
 from src.utils.labeling import ID2LABEL, LABEL2ID
 from transformers import AutoTokenizer, AutoModelForTokenClassification ###ADDED###
-from src.models import BertMLPForTokenClassification ###ADDED###
+from src.models import BertMLPForTokenClassification, BertCRFForTokenClassification ###ADDED###
 
 
 def load_jsonl(path: str):
@@ -83,15 +84,43 @@ def align_predictions_to_words(pred_ids, word_ids, num_words):
     return word_predictions
 
 
-def predict_sample(model, tokenizer, processed_sample, device):
-    tokenized = tokenize_and_align(processed_sample, tokenizer, LABEL2ID)
+def predict_sample(model, tokenizer, processed_sample, device, head_type):
+    #tokenized = tokenize_and_align(processed_sample, tokenizer, LABEL2ID)
+    if head_type == "crf":
+        tokenized = tokenize_and_align_crf(processed_sample, tokenizer, LABEL2ID)
+    else:
+        tokenized = tokenize_and_align(processed_sample, tokenizer, LABEL2ID)
 
     input_ids = torch.tensor(tokenized["input_ids"]).unsqueeze(0).to(device)
     attention_mask = torch.tensor(tokenized["attention_mask"]).unsqueeze(0).to(device)
 
+    if head_type == "crf":
+        crf_mask = torch.tensor(tokenized["crf_mask"]).unsqueeze(0).to(device)
+
+    # with torch.no_grad():
+    #     outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+    #     pred_ids = torch.argmax(outputs.logits, dim=-1)[0].cpu().tolist()
     with torch.no_grad():
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-        pred_ids = torch.argmax(outputs.logits, dim=-1)[0].cpu().tolist()
+        if head_type == "crf":
+            decoded = model.decode(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                crf_mask=crf_mask,
+            )
+
+            # decoded[0] only contains labels for active CRF positions.
+            # Expand it back to full tokenizer length.
+            pred_ids = [LABEL2ID["O"]] * len(tokenized["input_ids"])
+            active_positions = [
+                i for i, m in enumerate(tokenized["crf_mask"]) if m == 1
+            ]
+
+            for pos, label_id in zip(active_positions, decoded[0]):
+                pred_ids[pos] = label_id
+
+        else:
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            pred_ids = torch.argmax(outputs.logits, dim=-1)[0].cpu().tolist()
 
     word_ids = tokenized.word_ids()
 
@@ -143,11 +172,14 @@ def main():
 
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     #model = AutoModelForTokenClassification.from_pretrained(model_path)
-    if head_type == "linear":
+    if head_type == "linear": ###ADDED###
         model = AutoModelForTokenClassification.from_pretrained(model_path)
 
     elif head_type == "mlp":
         model = BertMLPForTokenClassification.from_pretrained(model_path)
+    
+    elif head_type == "crf": ###ADDED###
+        model = BertCRFForTokenClassification.from_pretrained(model_path)
 
     else:
         raise ValueError(f"Unsupported head_type: {head_type}")
@@ -171,6 +203,7 @@ def main():
             tokenizer=tokenizer,
             processed_sample=processed_sample,
             device=device,
+            head_type=head_type,
         )
 
         if len(pred_labels) != len(tokens):

@@ -1,1 +1,2 @@
 from src.models.mlp_token_classifier import BertMLPForTokenClassification
+from src.models.crf_token_classifier import BertCRFForTokenClassification

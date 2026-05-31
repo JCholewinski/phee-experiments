@@ -6,8 +6,9 @@ import time
 from pathlib import Path
 from transformers import AutoTokenizer, AutoModelForTokenClassification, AutoConfig, TrainingArguments, Trainer
 from src.preprocessing.to_bio import convert_sample_to_bio
-from src.models import BertMLPForTokenClassification ###ADDED###
+from src.models import BertMLPForTokenClassification, BertCRFForTokenClassification ###ADDED###
 from src.preprocessing.tokenize_and_align import tokenize_and_align
+from src.preprocessing.tokenize_and_align_crf import tokenize_and_align_crf ###ADDED###
 from src.utils.labeling import LABEL_LIST, LABEL2ID, ID2LABEL
 from src.datasets.seq_dataset import load_dataset, build_dataset
 from huggingface_hub import upload_folder, create_repo
@@ -47,10 +48,21 @@ dataset = build_dataset(raw_data, convert_sample_to_bio)
 # 3. tokenizer
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
-dataset = dataset.map(
-    lambda x: tokenize_and_align(x, tokenizer, LABEL2ID),
-    batched=False
-)
+# dataset = dataset.map(
+#     lambda x: tokenize_and_align(x, tokenizer, LABEL2ID),
+#     batched=False
+# )
+
+if HEAD_TYPE == "crf":
+    dataset = dataset.map(
+        lambda x: tokenize_and_align_crf(x, tokenizer, LABEL2ID),
+        batched=False,
+    )
+else:
+    dataset = dataset.map(
+        lambda x: tokenize_and_align(x, tokenizer, LABEL2ID),
+        batched=False,
+    )
 
 # # 4. model
 # model = AutoModelForTokenClassification.from_pretrained(
@@ -91,6 +103,21 @@ elif HEAD_TYPE == "mlp":
     )
 
     model = BertMLPForTokenClassification.from_pretrained(
+        MODEL_NAME,
+        config=model_config,
+    )
+elif HEAD_TYPE == "crf":
+    model_config = AutoConfig.from_pretrained(
+        MODEL_NAME,
+        num_labels=len(LABEL_LIST),
+        id2label=ID2LABEL,
+        label2id=LABEL2ID,
+    )
+
+    model_config.crf_ce_loss_weight = config["model"].get("crf_ce_loss_weight", 1.0)
+    model_config.crf_loss_weight = config["model"].get("crf_loss_weight", 0.1)
+
+    model = BertCRFForTokenClassification.from_pretrained(
         MODEL_NAME,
         config=model_config,
     )
