@@ -8,16 +8,22 @@ import statistics
 
 import torch
 import yaml
-from datasets import Dataset
 from transformers import AutoModelForTokenClassification, AutoTokenizer
 
 from src.evaluation.bio_to_spans import bio_to_spans
 from src.preprocessing.to_bio import convert_sample_to_bio
 from src.preprocessing.tokenize_and_align import tokenize_and_align
-from src.preprocessing.tokenize_and_align_crf import tokenize_and_align_crf ###ADDED###
+from src.preprocessing.tokenize_and_align_crf import tokenize_and_align_crf
 from src.utils.labeling import ID2LABEL, LABEL2ID
-from transformers import AutoTokenizer, AutoModelForTokenClassification ###ADDED###
-from src.models import BertMLPForTokenClassification, BertCRFForTokenClassification ###ADDED###
+
+from src.models import (
+    BertMLPForTokenClassification,
+    BertCRFForTokenClassification,
+    BertFrozenLinearCRFForTokenClassification,
+)
+
+
+CRF_HEAD_TYPES = {"crf", "linear_crf_frozen"}
 
 
 def load_jsonl(path: str):
@@ -56,11 +62,9 @@ def align_predictions_to_words(pred_ids, word_ids, num_words):
     """
     Convert tokenizer/subtoken-level predictions back to original word-level labels.
 
-    For each original word/token, we take the prediction from the first tokenizer
-    token that belongs to this word. This guarantees exactly one prediction per
-    original token.
+    For each original word/token, we take the prediction from the first tokenizer token
+    that belongs to this word. This guarantees exactly one prediction per original token.
     """
-
     word_predictions = [None] * num_words
 
     for pred_id, word_id in zip(pred_ids, word_ids):
@@ -84,9 +88,47 @@ def align_predictions_to_words(pred_ids, word_ids, num_words):
     return word_predictions
 
 
-def predict_sample(model, tokenizer, processed_sample, device, head_type):
-    #tokenized = tokenize_and_align(processed_sample, tokenizer, LABEL2ID)
-    if head_type == "crf":
+def expand_crf_decoded_to_token_level(decoded_ids, tokenized):
+    """
+    CRF decode returns labels only for compact active positions selected by crf_mask.
+
+    This function expands them back to tokenizer-level predictions so that the existing
+    align_predictions_to_words(...) function can map predictions to original words.
+
+    Example:
+    input tokenizer positions:
+    [CLS], word1, ##sub, word2, [SEP], [PAD]
+    crf_mask:
+       1      1      0     1     0      0
+    decoded_ids:
+    [O, label_word1, label_word2]
+
+    expanded:
+    [O, label_word1, O, label_word2, O, O]
+    """
+    crf_mask = tokenized["crf_mask"]
+
+    if sum(crf_mask) != len(decoded_ids):
+        raise ValueError(
+            f"CRF decoded length mismatch: decoded={len(decoded_ids)}, "
+            f"active_positions={sum(crf_mask)}"
+        )
+
+    expanded = []
+    decoded_idx = 0
+
+    for is_active in crf_mask:
+        if is_active:
+            expanded.append(decoded_ids[decoded_idx])
+            decoded_idx += 1
+        else:
+            expanded.append(LABEL2ID["O"])
+
+    return expanded
+
+
+def predict_sample(model, tokenizer, processed_sample, device, head_type: str):
+    if head_type in CRF_HEAD_TYPES:
         tokenized = tokenize_and_align_crf(processed_sample, tokenizer, LABEL2ID)
     else:
         tokenized = tokenize_and_align(processed_sample, tokenizer, LABEL2ID)
@@ -94,32 +136,29 @@ def predict_sample(model, tokenizer, processed_sample, device, head_type):
     input_ids = torch.tensor(tokenized["input_ids"]).unsqueeze(0).to(device)
     attention_mask = torch.tensor(tokenized["attention_mask"]).unsqueeze(0).to(device)
 
-    if head_type == "crf":
+    crf_mask = None
+    if head_type in CRF_HEAD_TYPES:
         crf_mask = torch.tensor(tokenized["crf_mask"]).unsqueeze(0).to(device)
 
-    # with torch.no_grad():
-    #     outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-    #     pred_ids = torch.argmax(outputs.logits, dim=-1)[0].cpu().tolist()
     with torch.no_grad():
-        if head_type == "crf":
+        if head_type in CRF_HEAD_TYPES:
             decoded = model.decode(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 crf_mask=crf_mask,
             )
 
-            # decoded[0] only contains labels for active CRF positions.
-            # Expand it back to full tokenizer length.
-            pred_ids = [LABEL2ID["O"]] * len(tokenized["input_ids"])
-            active_positions = [
-                i for i, m in enumerate(tokenized["crf_mask"]) if m == 1
-            ]
-
-            for pos, label_id in zip(active_positions, decoded[0]):
-                pred_ids[pos] = label_id
+            # decoded[0] contains predictions only for active CRF positions
+            pred_ids = expand_crf_decoded_to_token_level(
+                decoded_ids=decoded[0],
+                tokenized=tokenized,
+            )
 
         else:
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+            )
             pred_ids = torch.argmax(outputs.logits, dim=-1)[0].cpu().tolist()
 
     word_ids = tokenized.word_ids()
@@ -133,20 +172,40 @@ def predict_sample(model, tokenizer, processed_sample, device, head_type):
     return pred_labels
 
 
+def load_model(head_type: str, model_path: str):
+    if head_type == "linear":
+        return AutoModelForTokenClassification.from_pretrained(model_path)
+
+    if head_type == "mlp":
+        return BertMLPForTokenClassification.from_pretrained(model_path)
+
+    if head_type == "crf":
+        return BertCRFForTokenClassification.from_pretrained(model_path)
+
+    if head_type == "linear_crf_frozen":
+        return BertFrozenLinearCRFForTokenClassification.from_pretrained(model_path)
+
+    raise ValueError(f"Unsupported head_type: {head_type}")
+
+
 def main():
     parser = argparse.ArgumentParser()
+
     parser.add_argument("--config", default="configs/seq.yaml")
+
     parser.add_argument(
         "--split",
         choices=["train", "val", "test"],
         default="val",
         help="Dataset split to run prediction on.",
     )
+
     parser.add_argument(
         "--model_path",
         default=None,
         help="Path to trained model. If not given, uses training.output_dir_final.",
     )
+
     parser.add_argument(
         "--output_path",
         default=None,
@@ -157,34 +216,25 @@ def main():
 
     with open(args.config, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
-    
-    head_type = config["model"].get("head_type", "linear") ###ADDED###
+
+    head_type = config["model"].get("head_type", "linear")
 
     data_path = get_split_path(config, args.split)
     model_path = args.model_path or config["training"]["output_dir_final"]
 
-    output_path = args.output_path
-    if output_path is None:
-        output_path = f"outputs/predictions/seq_{head_type}_{args.split}.jsonl" ###ADDED###
+    if args.output_path is None:
+        output_path = f"data/outputs/predictions/seq_{head_type}_{args.split}.jsonl"
+    else:
+        output_path = args.output_path
 
     raw_data = load_jsonl(data_path)
     processed_data = [convert_sample_to_bio(sample) for sample in raw_data]
 
     tokenizer = AutoTokenizer.from_pretrained(model_path)
-    #model = AutoModelForTokenClassification.from_pretrained(model_path)
-    if head_type == "linear": ###ADDED###
-        model = AutoModelForTokenClassification.from_pretrained(model_path)
-
-    elif head_type == "mlp":
-        model = BertMLPForTokenClassification.from_pretrained(model_path)
-    
-    elif head_type == "crf": ###ADDED###
-        model = BertCRFForTokenClassification.from_pretrained(model_path)
-
-    else:
-        raise ValueError(f"Unsupported head_type: {head_type}")
+    model = load_model(head_type=head_type, model_path=model_path)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     model.to(device)
     model.eval()
 
@@ -192,9 +242,8 @@ def main():
     sample_times = []
 
     for idx, processed_sample in enumerate(processed_data):
-        
         sample_start = time.perf_counter()
-        
+
         tokens = processed_sample["tokens"]
         gold_labels = processed_sample["labels"]
 
@@ -233,8 +282,8 @@ def main():
     total_time = sum(sample_times)
 
     timing = {
-        "method": f"sequence_labeling_{head_type}", ###ADDED###
-        "head_type": head_type, ###ADDED###
+        "method": f"sequence_labeling_{head_type}",
+        "head_type": head_type,
         "split": args.split,
         "num_samples": len(sample_times),
         "total_inference_time_seconds": total_time,
@@ -246,7 +295,9 @@ def main():
         "device": str(device),
     }
 
-    timing_output_path = Path(f"outputs/timing/seq_{head_type}_{args.split}_inference_timing.json") ###ADDED###
+    timing_output_path = Path(
+        f"data/outputs/timing/seq_{head_type}_{args.split}_inference_timing.json"
+    )
     timing_output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(timing_output_path, "w", encoding="utf-8") as f:

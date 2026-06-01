@@ -1,0 +1,17 @@
+training:
+  output_dir: outputs/seq/linear_crf_frozen
+  output_dir_final: outputs/seq/linear_crf_frozen/final
+  per_device_train_batch_size: 8
+  num_train_epochs: 5
+  logging_steps: 10
+  learning_rate: 0.01
+  save_strategy: epoch
+
+model:
+  name: outputs/seq/linear/final
+  head_type: linear_crf_frozen
+
+data:
+  train_path: data/raw/train_main.json
+  test_path: data/raw/test_main.json
+  val_path: data/raw/val_main.json
