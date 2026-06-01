@@ -12,7 +12,7 @@ model:
   head_type: crf
   crf_ce_loss_weight: 1.0
   crf_loss_weight: 0.0
-  emission_scale: 5.0
+  emission_scale: 1.0
   invalid_transition_penalty: -10000.0
   decode_strategy: constrained_viterbi
 

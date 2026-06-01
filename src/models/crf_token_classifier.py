@@ -26,10 +26,12 @@ class BertCRFForTokenClassification(BertPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
+        #Kept for optional CRF-loss experiments, but the final working setup
+        #uses crf_loss_weight = 0.0 and decode_constrained()
         self.crf = CRF(config.num_labels, batch_first=True)
 
         self.ce_loss_weight = getattr(config, "crf_ce_loss_weight", 1.0)
-        self.crf_loss_weight = getattr(config, "crf_loss_weight", 0.1)
+        self.crf_loss_weight = getattr(config, "crf_loss_weight", 0.0)
         
         self.post_init()
 
@@ -63,112 +65,112 @@ class BertCRFForTokenClassification(BertPreTrainedModel):
 
         return emissions, outputs
     
-    def _apply_bio_constraints(self):
-        """
-        Enforce basic BIO constraints in the CRF transition matrix.
+    # def _apply_bio_constraints(self):
+    #     """
+    #     Enforce basic BIO constraints in the CRF transition matrix.
 
-        Invalid:
-            START -> I-X
-            O -> I-X
-            B-Y -> I-X where X != Y
-            I-Y -> I-X where X != Y
+    #     Invalid:
+    #         START -> I-X
+    #         O -> I-X
+    #         B-Y -> I-X where X != Y
+    #         I-Y -> I-X where X != Y
 
-        Valid:
-            B-X -> I-X
-            I-X -> I-X
-        """
-        neg_value = -10000.0
+    #     Valid:
+    #         B-X -> I-X
+    #         I-X -> I-X
+    #     """
+    #     neg_value = -10000.0
 
-        id2label = {
-            int(k): v for k, v in self.config.id2label.items()
-        }
+    #     id2label = {
+    #         int(k): v for k, v in self.config.id2label.items()
+    #     }
 
-        with torch.no_grad():
-            for to_id, to_label in id2label.items():
-                if not to_label.startswith("I-"):
-                    continue
+    #     with torch.no_grad():
+    #         for to_id, to_label in id2label.items():
+    #             if not to_label.startswith("I-"):
+    #                 continue
 
-                to_type = to_label[2:]
+    #             to_type = to_label[2:]
 
-                # Sequence should not start with I-X
-                self.crf.start_transitions[to_id] = neg_value
+    #             # Sequence should not start with I-X
+    #             self.crf.start_transitions[to_id] = neg_value
 
-                for from_id, from_label in id2label.items():
-                    valid_previous = (
-                        from_label == f"B-{to_type}"
-                        or from_label == f"I-{to_type}"
-                    )
+    #             for from_id, from_label in id2label.items():
+    #                 valid_previous = (
+    #                     from_label == f"B-{to_type}"
+    #                     or from_label == f"I-{to_type}"
+    #                 )
 
-                    if not valid_previous:
-                        self.crf.transitions[from_id, to_id] = neg_value
+    #                 if not valid_previous:
+    #                     self.crf.transitions[from_id, to_id] = neg_value
 
-    def _apply_zero_bio_constraints(self):
-        """
-        Use CRF decoding only for BIO-valid transitions.
+    # def _apply_zero_bio_constraints(self):
+    #     """
+    #     Use CRF decoding only for BIO-valid transitions.
 
-        All valid transitions get score 0.
-        Invalid BIO transitions get a large negative score.
-        This prevents learned/random CRF transitions from dominating emissions.
-        """
-        neg_value = -10000.0
+    #     All valid transitions get score 0.
+    #     Invalid BIO transitions get a large negative score.
+    #     This prevents learned/random CRF transitions from dominating emissions.
+    #     """
+    #     neg_value = -10000.0
 
-        id2label = {int(k): v for k, v in self.config.id2label.items()}
+    #     id2label = {int(k): v for k, v in self.config.id2label.items()}
 
-        with torch.no_grad():
-            # Reset all transitions to neutral
-            self.crf.transitions.fill_(0.0)
-            self.crf.start_transitions.fill_(0.0)
-            self.crf.end_transitions.fill_(0.0)
+    #     with torch.no_grad():
+    #         # Reset all transitions to neutral
+    #         self.crf.transitions.fill_(0.0)
+    #         self.crf.start_transitions.fill_(0.0)
+    #         self.crf.end_transitions.fill_(0.0)
 
-            for to_id, to_label in id2label.items():
-                if not to_label.startswith("I-"):
-                    continue
+    #         for to_id, to_label in id2label.items():
+    #             if not to_label.startswith("I-"):
+    #                 continue
 
-                to_type = to_label[2:]
+    #             to_type = to_label[2:]
 
-                # Cannot start a sequence with I-X
-                self.crf.start_transitions[to_id] = neg_value
+    #             # Cannot start a sequence with I-X
+    #             self.crf.start_transitions[to_id] = neg_value
 
-                for from_id, from_label in id2label.items():
-                    valid_previous = (
-                        from_label == f"B-{to_type}"
-                        or from_label == f"I-{to_type}"
-                    )
+    #             for from_id, from_label in id2label.items():
+    #                 valid_previous = (
+    #                     from_label == f"B-{to_type}"
+    #                     or from_label == f"I-{to_type}"
+    #                 )
 
-                    if not valid_previous:
-                        self.crf.transitions[from_id, to_id] = neg_value
+    #                 if not valid_previous:
+    #                     self.crf.transitions[from_id, to_id] = neg_value
 
-    def _apply_soft_bio_constraints(self):
-        """
-        Softly discourage invalid BIO transitions instead of fully banning them.
-        This makes CRF decoding more conservative and closer to emission argmax.
-        """
-        penalty = getattr(self.config, "invalid_transition_penalty", -2.0)
+    # def _apply_soft_bio_constraints(self):
+    #     """
+    #     Softly discourage invalid BIO transitions instead of fully banning them.
+    #     This makes CRF decoding more conservative and closer to emission argmax.
+    #     """
+    #     penalty = getattr(self.config, "invalid_transition_penalty", -2.0)
 
-        id2label = {int(k): v for k, v in self.config.id2label.items()}
+    #     id2label = {int(k): v for k, v in self.config.id2label.items()}
 
-        with torch.no_grad():
-            self.crf.transitions.fill_(0.0)
-            self.crf.start_transitions.fill_(0.0)
-            self.crf.end_transitions.fill_(0.0)
+    #     with torch.no_grad():
+    #         self.crf.transitions.fill_(0.0)
+    #         self.crf.start_transitions.fill_(0.0)
+    #         self.crf.end_transitions.fill_(0.0)
 
-            for to_id, to_label in id2label.items():
-                if not to_label.startswith("I-"):
-                    continue
+    #         for to_id, to_label in id2label.items():
+    #             if not to_label.startswith("I-"):
+    #                 continue
 
-                to_type = to_label[2:]
+    #             to_type = to_label[2:]
 
-                # Starting with I-X is suspicious, but not impossible
-                self.crf.start_transitions[to_id] = penalty
+    #             # Starting with I-X is suspicious, but not impossible
+    #             self.crf.start_transitions[to_id] = penalty
 
-                for from_id, from_label in id2label.items():
-                    valid_previous = (
-                        from_label == f"B-{to_type}"
-                        or from_label == f"I-{to_type}"
-                    )
+    #             for from_id, from_label in id2label.items():
+    #                 valid_previous = (
+    #                     from_label == f"B-{to_type}"
+    #                     or from_label == f"I-{to_type}"
+    #                 )
 
-                    if not valid_previous:
-                        self.crf.transitions[from_id, to_id] = penalty
+    #                 if not valid_previous:
+    #                     self.crf.transitions[from_id, to_id] = penalty
 
     def forward(
         self,
@@ -199,42 +201,38 @@ class BertCRFForTokenClassification(BertPreTrainedModel):
         )
 
     
-
-        # loss = None
-        # if labels is not None:
-        #     mask = attention_mask.bool()
-
-        #     loss = -self.crf(
-        #         emissions,
-        #         labels,
-        #         mask=mask,
-        #         reduction="mean",
-        #     )
         loss = None
         if labels is not None:
-            self._apply_zero_bio_constraints()
-            if crf_mask is not None:
-                mask = crf_mask.bool()
-            else:
-                mask = attention_mask.bool()
-
-            crf_labels = labels.clone()
-            crf_labels[crf_labels == -100] = 0  # 0 = O
-
-            crf_loss = -self.crf(
-                emissions,
-                crf_labels,
-                mask=mask,
-                reduction="token_mean",
-            )
-
             ce_loss_fct = CrossEntropyLoss(ignore_index=-100)
             ce_loss = ce_loss_fct(
                 emissions.view(-1, self.num_labels),
                 labels.view(-1),
             )
 
-            loss = self.ce_loss_weight * ce_loss + self.crf_loss_weight * crf_loss
+            if self.crf_loss_weight > 0:
+                self._apply_zero_bio_constraints()
+
+                if crf_mask is not None:
+                    mask = crf_mask.bool()
+                else:
+                    mask = attention_mask.bool()
+
+                crf_labels = labels.clone()
+                crf_labels[crf_labels == -100] = 0
+
+                crf_loss = -self.crf(
+                    emissions,
+                    crf_labels,
+                    mask=mask,
+                    reduction="token_mean",
+                )
+
+                loss = (
+                    self.ce_loss_weight * ce_loss
+                    + self.crf_loss_weight * crf_loss
+                )
+            else:
+                loss = self.ce_loss_weight * ce_loss
 
         if not return_dict:
             output = (emissions,) + outputs[2:]
@@ -386,22 +384,22 @@ class BertCRFForTokenClassification(BertPreTrainedModel):
 
         return self._constrained_viterbi_decode(emissions, mask)
 
-    def decode(self, input_ids=None, attention_mask=None, token_type_ids=None, crf_mask=None):
-        emissions, _ = self._get_emissions(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            return_dict=True,
-        )
+    # def decode(self, input_ids=None, attention_mask=None, token_type_ids=None, crf_mask=None):
+    #     emissions, _ = self._get_emissions(
+    #         input_ids=input_ids,
+    #         attention_mask=attention_mask,
+    #         token_type_ids=token_type_ids,
+    #         return_dict=True,
+    #     )
 
-        emission_scale = getattr(self.config, "emission_scale", 3.0)
-        emissions = emissions * emission_scale
+    #     emission_scale = getattr(self.config, "emission_scale", 3.0)
+    #     emissions = emissions * emission_scale
 
-        self._apply_soft_bio_constraints()
+    #     self._apply_soft_bio_constraints()
 
-        if crf_mask is not None:
-            mask = crf_mask.bool()
-        else:
-            mask = attention_mask.bool()
+    #     if crf_mask is not None:
+    #         mask = crf_mask.bool()
+    #     else:
+    #         mask = attention_mask.bool()
 
-        return self.crf.decode(emissions, mask=mask)
+    #     return self.crf.decode(emissions, mask=mask)

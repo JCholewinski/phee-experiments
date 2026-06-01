@@ -14,10 +14,9 @@ from transformers import AutoModelForTokenClassification, AutoTokenizer
 from src.evaluation.bio_to_spans import bio_to_spans
 from src.preprocessing.to_bio import convert_sample_to_bio
 from src.preprocessing.tokenize_and_align import tokenize_and_align
-from src.preprocessing.tokenize_and_align_crf import tokenize_and_align_crf ###ADDED###
+from src.preprocessing.tokenize_and_align_crf import tokenize_and_align_crf
 from src.utils.labeling import ID2LABEL, LABEL2ID
-from transformers import AutoTokenizer, AutoModelForTokenClassification ###ADDED###
-from src.models import BertMLPForTokenClassification, BertCRFForTokenClassification ###ADDED###
+from src.models import BertMLPForTokenClassification, BertCRFForTokenClassification
 
 
 def load_jsonl(path: str):
@@ -97,9 +96,6 @@ def predict_sample(model, tokenizer, processed_sample, device, head_type, decode
     if head_type == "crf":
         crf_mask = torch.tensor(tokenized["crf_mask"]).unsqueeze(0).to(device)
 
-    # with torch.no_grad():
-    #     outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-    #     pred_ids = torch.argmax(outputs.logits, dim=-1)[0].cpu().tolist()
         with torch.no_grad():
             if head_type == "crf":
                 if decode_strategy == "crf":
@@ -183,22 +179,26 @@ def main():
     with open(args.config, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
     
-    head_type = config["model"].get("head_type", "linear") ###ADDED###
-    decode_strategy = config["model"].get("decode_strategy", "argmax")
+    head_type = config["model"].get("head_type", "linear")
+    #CRF decoding strategies:
+    # - "constrained_viterbi": final CRF-style decoder using BIO constraints
+    # - "crf": standard learned CRF decoding, kept for ablation/debugging
+    # - "argmax": emission-only decoding, kept as a diagnostic baseline
+    decode_strategy = config["model"].get("decode_strategy", "constrained_viterbi")
 
     data_path = get_split_path(config, args.split)
     model_path = args.model_path or config["training"]["output_dir_final"]
 
     output_path = args.output_path
     if output_path is None:
-        output_path = f"outputs/predictions/seq_{head_type}_{args.split}.jsonl" ###ADDED###
+        output_path = f"outputs/predictions/seq_{head_type}_{args.split}.jsonl"
 
     raw_data = load_jsonl(data_path)
     processed_data = [convert_sample_to_bio(sample) for sample in raw_data]
 
     tokenizer = AutoTokenizer.from_pretrained(model_path)
-    #model = AutoModelForTokenClassification.from_pretrained(model_path)
-    if head_type == "linear": ###ADDED###
+    
+    if head_type == "linear":
         model = AutoModelForTokenClassification.from_pretrained(model_path)
 
     elif head_type == "mlp":
@@ -268,8 +268,8 @@ def main():
     total_time = sum(sample_times)
 
     timing = {
-        "method": f"sequence_labeling_{head_type}", ###ADDED###
-        "head_type": head_type, ###ADDED###
+        "method": f"sequence_labeling_{head_type}",
+        "head_type": head_type,
         "split": args.split,
         "num_samples": len(sample_times),
         "total_inference_time_seconds": total_time,
@@ -281,7 +281,7 @@ def main():
         "device": str(device),
     }
 
-    timing_output_path = Path(f"outputs/timing/seq_{head_type}_{args.split}_inference_timing.json") ###ADDED###
+    timing_output_path = Path(f"outputs/timing/seq_{head_type}_{args.split}_inference_timing.json")
     timing_output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(timing_output_path, "w", encoding="utf-8") as f:
