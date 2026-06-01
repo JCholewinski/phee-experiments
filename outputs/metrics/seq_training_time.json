@@ -1,8 +1,9 @@
 {
-  "method": "sequence_labeling",
-  "training_time_seconds": 196.7650814160006,
-  "training_time_minutes": 3.27941802360001,
+  "method": "sequence_labeling_crf",
+  "training_time_seconds": 870.2030120920099,
+  "training_time_minutes": 14.503383534866831,
   "num_train_samples": 3378,
   "num_epochs": 2,
-  "model_name": "bert-base-cased"
+  "model_name": "outputs/seq/linear/final",
+  "head_type": "crf"
 }

@@ -1,0 +1,13 @@
+{
+  "method": "sequence_labeling_linear",
+  "head_type": "linear",
+  "split": "val",
+  "num_samples": 724,
+  "total_inference_time_seconds": 27.014055205945624,
+  "avg_inference_time_seconds": 0.037312230947438706,
+  "median_inference_time_seconds": 0.03714945049432572,
+  "min_inference_time_seconds": 0.035614542008261196,
+  "max_inference_time_seconds": 0.14541784299944993,
+  "model_path": "outputs/seq/final",
+  "device": "cuda"
+}

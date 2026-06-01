@@ -84,7 +84,7 @@ def align_predictions_to_words(pred_ids, word_ids, num_words):
     return word_predictions
 
 
-def predict_sample(model, tokenizer, processed_sample, device, head_type):
+def predict_sample(model, tokenizer, processed_sample, device, head_type, decode_strategy):
     #tokenized = tokenize_and_align(processed_sample, tokenizer, LABEL2ID)
     if head_type == "crf":
         tokenized = tokenize_and_align_crf(processed_sample, tokenizer, LABEL2ID)
@@ -100,27 +100,52 @@ def predict_sample(model, tokenizer, processed_sample, device, head_type):
     # with torch.no_grad():
     #     outputs = model(input_ids=input_ids, attention_mask=attention_mask)
     #     pred_ids = torch.argmax(outputs.logits, dim=-1)[0].cpu().tolist()
-    with torch.no_grad():
-        if head_type == "crf":
-            decoded = model.decode(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                crf_mask=crf_mask,
-            )
+        with torch.no_grad():
+            if head_type == "crf":
+                if decode_strategy == "crf":
+                    decoded = model.decode(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        crf_mask=crf_mask,
+                    )
 
-            # decoded[0] only contains labels for active CRF positions.
-            # Expand it back to full tokenizer length.
-            pred_ids = [LABEL2ID["O"]] * len(tokenized["input_ids"])
-            active_positions = [
-                i for i, m in enumerate(tokenized["crf_mask"]) if m == 1
-            ]
+                    pred_ids = [LABEL2ID["O"]] * len(tokenized["input_ids"])
+                    active_positions = [
+                        i for i, m in enumerate(tokenized["crf_mask"]) if m == 1
+                    ]
 
-            for pos, label_id in zip(active_positions, decoded[0]):
-                pred_ids[pos] = label_id
+                    for pos, label_id in zip(active_positions, decoded[0]):
+                        pred_ids[pos] = label_id
 
-        else:
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            pred_ids = torch.argmax(outputs.logits, dim=-1)[0].cpu().tolist()
+                elif decode_strategy == "constrained_viterbi":
+                    decoded = model.decode_constrained(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        crf_mask=crf_mask,
+                    )
+
+                    pred_ids = [LABEL2ID["O"]] * len(tokenized["input_ids"])
+                    active_positions = [
+                        i for i, m in enumerate(tokenized["crf_mask"]) if m == 1
+                    ]
+
+                    for pos, label_id in zip(active_positions, decoded[0]):
+                        pred_ids[pos] = label_id
+
+                elif decode_strategy == "argmax":
+                    outputs = model(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        crf_mask=crf_mask,
+                    )
+                    pred_ids = torch.argmax(outputs.logits, dim=-1)[0].cpu().tolist()
+
+                else:
+                    raise ValueError(f"Unsupported CRF decode_strategy: {decode_strategy}")
+
+            else:
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+                pred_ids = torch.argmax(outputs.logits, dim=-1)[0].cpu().tolist()
 
     word_ids = tokenized.word_ids()
 
@@ -159,6 +184,7 @@ def main():
         config = yaml.safe_load(f)
     
     head_type = config["model"].get("head_type", "linear") ###ADDED###
+    decode_strategy = config["model"].get("decode_strategy", "argmax")
 
     data_path = get_split_path(config, args.split)
     model_path = args.model_path or config["training"]["output_dir_final"]
@@ -185,6 +211,14 @@ def main():
         raise ValueError(f"Unsupported head_type: {head_type}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if head_type == "crf":
+        model.config.emission_scale = config["model"].get("emission_scale", 5.0)
+        model.config.invalid_transition_penalty = config["model"].get(
+            "invalid_transition_penalty",
+            -4.0,
+        )
+
     model.to(device)
     model.eval()
 
@@ -204,6 +238,7 @@ def main():
             processed_sample=processed_sample,
             device=device,
             head_type=head_type,
+            decode_strategy=decode_strategy,
         )
 
         if len(pred_labels) != len(tokens):

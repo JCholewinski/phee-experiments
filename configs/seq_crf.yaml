@@ -4,14 +4,17 @@ training:
   per_device_train_batch_size: 8 #If you get CUDA out-of-memory, reduce: per_device_train_batch_size: 4
   num_train_epochs: 2
   logging_steps: 10
-  learning_rate: 0.00005
+  learning_rate: 0.00001
   save_strategy: epoch
 
 model:
-  name: bert-base-cased
+  name: outputs/seq/linear/final #bert-base-cased
   head_type: crf
   crf_ce_loss_weight: 1.0
   crf_loss_weight: 0.0
+  emission_scale: 5.0
+  invalid_transition_penalty: -10000.0
+  decode_strategy: constrained_viterbi
 
 data:
   train_path: data/raw/train_main.json
