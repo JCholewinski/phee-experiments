@@ -127,7 +127,7 @@ def expand_crf_decoded_to_token_level(decoded_ids, tokenized):
     return expanded
 
 
-def predict_sample(model, tokenizer, processed_sample, device, head_type: str):
+def predict_sample(model, tokenizer, processed_sample, device, head_type: str, decode_mode: str = "crf"):
     if head_type in CRF_HEAD_TYPES:
         tokenized = tokenize_and_align_crf(processed_sample, tokenizer, LABEL2ID)
     else:
@@ -141,7 +141,7 @@ def predict_sample(model, tokenizer, processed_sample, device, head_type: str):
         crf_mask = torch.tensor(tokenized["crf_mask"]).unsqueeze(0).to(device)
 
     with torch.no_grad():
-        if head_type in CRF_HEAD_TYPES:
+        if head_type in CRF_HEAD_TYPES and decode_mode == "crf":
             decoded = model.decode(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -155,10 +155,15 @@ def predict_sample(model, tokenizer, processed_sample, device, head_type: str):
             )
 
         else:
-            outputs = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-            )
+            model_inputs = {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+            }
+
+            if head_type in CRF_HEAD_TYPES:
+                model_inputs["crf_mask"] = crf_mask
+
+            outputs = model(**model_inputs)
             pred_ids = torch.argmax(outputs.logits, dim=-1)[0].cpu().tolist()
 
     word_ids = tokenized.word_ids()
@@ -212,6 +217,13 @@ def main():
         help="Where to save JSONL predictions.",
     )
 
+    parser.add_argument(
+        "--decode_mode",
+        choices=["crf", "argmax"],
+        default="crf",
+        help="For CRF-based models: use CRF decode or argmax over emission logits.",
+    )
+
     args = parser.parse_args()
 
     with open(args.config, "r", encoding="utf-8") as f:
@@ -253,6 +265,7 @@ def main():
             processed_sample=processed_sample,
             device=device,
             head_type=head_type,
+            decode_mode=args.decode_mode,
         )
 
         if len(pred_labels) != len(tokens):

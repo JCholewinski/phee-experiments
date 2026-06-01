@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 import yaml
+import torch
 from transformers import AutoTokenizer, AutoConfig, TrainingArguments, Trainer
 
 from src.datasets.seq_dataset import build_dataset
@@ -65,8 +66,32 @@ def main():
         config=model_config,
     )
 
+    # Force-freeze the pretrained emission model.
+    # Only CRF transition parameters should remain trainable.
+    for name, param in model.named_parameters():
+        param.requires_grad = False
+
+    for name, param in model.crf.named_parameters():
+        param.requires_grad = True
+
+    # Start from a neutral CRF decoder.
+    # With zero transitions, CRF decoding should initially behave close to
+    # token-wise argmax over the already trained linear emission scores.
+    with torch.no_grad():
+        model.crf.start_transitions.zero_()
+        model.crf.end_transitions.zero_()
+        model.crf.transitions.zero_()
+
+    trainable_names = [
+        name for name, param in model.named_parameters() if param.requires_grad
+    ]
+
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total_params = sum(p.numel() for p in model.parameters())
+
+    print("Trainable parameter names:")
+    for name in trainable_names:
+        print(f"  {name}")
 
     print(f"Loaded trained linear model from: {linear_model_path}")
     print(f"Trainable parameters: {trainable_params}")
