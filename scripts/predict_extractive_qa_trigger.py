@@ -121,24 +121,36 @@ def predict_answer(
         start_scores = start_logits[feature_idx]
         end_scores = end_logits[feature_idx]
 
-        start_indexes = torch.topk(
-            start_scores,
-            k=min(20, len(start_scores)),
-        ).indices.tolist()
+        context_positions = []
 
-        end_indexes = torch.topk(
-            end_scores,
-            k=min(20, len(end_scores)),
-        ).indices.tolist()
+        for idx, sequence_id in enumerate(sequence_ids):
+            if sequence_id != 1:
+                continue
 
-        for start_index in start_indexes:
-            for end_index in end_indexes:
-                if start_index >= len(offsets) or end_index >= len(offsets):
-                    continue
+            char_start, char_end = offsets[idx]
 
-                if sequence_ids[start_index] != 1 or sequence_ids[end_index] != 1:
-                    continue
+            if char_start == char_end:
+                continue
 
+            context_positions.append(idx)
+
+        if not context_positions:
+            continue
+
+        top_start_indexes = sorted(
+            context_positions,
+            key=lambda idx: float(start_scores[idx]),
+            reverse=True,
+        )[:50]
+
+        top_end_indexes = sorted(
+            context_positions,
+            key=lambda idx: float(end_scores[idx]),
+            reverse=True,
+        )[:50]
+
+        for start_index in top_start_indexes:
+            for end_index in top_end_indexes:
                 if end_index < start_index:
                     continue
 
@@ -165,6 +177,8 @@ def predict_answer(
                     }
 
     return best_answer
+
+
 
 def inputs_to_sequence_ids(tokenizer, input_ids):
     """
