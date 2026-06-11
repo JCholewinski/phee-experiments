@@ -1,0 +1,21 @@
+model:
+  name: roberta-base
+
+data:
+  train_path: data/raw/train_main.json
+  val_path: data/raw/val_main.json
+  test_path: data/raw/test_main.json
+
+training:
+  output_dir: outputs/models/event_type_classifier
+  output_dir_final: outputs/models/event_type_classifier/final
+
+  num_train_epochs: 3
+  learning_rate: 0.00002
+  per_device_train_batch_size: 16
+  per_device_eval_batch_size: 16
+  weight_decay: 0.01
+  max_length: 256
+
+prediction:
+  threshold: 0.5

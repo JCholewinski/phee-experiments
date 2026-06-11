@@ -10,6 +10,12 @@ import torch
 import yaml
 from transformers import AutoModelForQuestionAnswering, AutoTokenizer
 
+from src.preprocessing.to_extractive_qa import (
+    EVENT_TYPE_TO_QUESTION,
+    TRIGGER_LABEL_TO_EVENT_TYPE,
+    tokens_to_context_and_offsets,
+)
+
 
 def load_jsonl(path):
     records = []
@@ -31,24 +37,48 @@ def save_jsonl(records, path):
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def get_split_path(config, split):
-    key = f"{split}_path"
+def get_raw_split_path(config, split):
+    if "raw_data" in config:
+        return config["raw_data"][f"{split}_path"]
 
-    if key not in config["data"]:
-        available = ", ".join(config["data"].keys())
-        raise KeyError(
-            f"Missing data.{key} in config. Available data keys: {available}"
-        )
+    raise KeyError(
+        "Missing raw_data section in config. "
+        "Add raw_data.train_path / raw_data.val_path / raw_data.test_path."
+    )
 
-    return config["data"][key]
+
+def token_span_to_text(tokens, start, end):
+    return " ".join(str(token) for token in tokens[start : end + 1])
+
+
+def extract_gold_trigger_spans(sample):
+    tokens = sample["sentence"]
+    context, token_offsets = tokens_to_context_and_offsets(tokens)
+
+    gold_spans = []
+
+    for event in sample["event"]:
+        for start, end, raw_label in event:
+            if raw_label not in TRIGGER_LABEL_TO_EVENT_TYPE:
+                continue
+
+            char_start = token_offsets[start][0]
+            char_end = token_offsets[end][1]
+
+            gold_spans.append(
+                {
+                    "label": "TRIGGER",
+                    "start": start,
+                    "end": end,
+                    "text": context[char_start:char_end],
+                    "event_type": TRIGGER_LABEL_TO_EVENT_TYPE[raw_label],
+                }
+            )
+
+    return gold_spans
 
 
 def char_span_to_token_span(char_start, char_end, token_offsets):
-    """
-    Maps predicted character span back to original token indices.
-    char_end is exclusive.
-    """
-
     overlapping_token_indices = []
 
     for token_idx, (token_start, token_end) in enumerate(token_offsets):
@@ -66,7 +96,14 @@ def char_span_to_token_span(char_start, char_end, token_offsets):
     return overlapping_token_indices[0], overlapping_token_indices[-1]
 
 
-def predict_answer(
+def spans_overlap(span_a, span_b):
+    return not (
+        span_a["char_end"] <= span_b["char_start"]
+        or span_b["char_end"] <= span_a["char_start"]
+    )
+
+
+def predict_n_best_answers(
     model,
     tokenizer,
     question,
@@ -74,7 +111,9 @@ def predict_answer(
     device,
     max_length=384,
     doc_stride=128,
-    max_answer_length=30,
+    max_answer_length=8,
+    n_best_size=50,
+    max_spans=1,
 ):
     tokenized = tokenizer(
         question,
@@ -106,13 +145,7 @@ def predict_answer(
     start_logits = outputs.start_logits.cpu()
     end_logits = outputs.end_logits.cpu()
 
-    best_score = None
-    best_answer = {
-        "text": "",
-        "char_start": None,
-        "char_end": None,
-        "score": None,
-    }
+    candidates = []
 
     for feature_idx in range(model_inputs["input_ids"].shape[0]):
         sequence_ids = sequence_ids_per_feature[feature_idx]
@@ -141,13 +174,13 @@ def predict_answer(
             context_positions,
             key=lambda idx: float(start_scores[idx]),
             reverse=True,
-        )[:50]
+        )[:n_best_size]
 
         top_end_indexes = sorted(
             context_positions,
             key=lambda idx: float(end_scores[idx]),
             reverse=True,
-        )[:50]
+        )[:n_best_size]
 
         for start_index in top_start_indexes:
             for end_index in top_end_indexes:
@@ -167,113 +200,54 @@ def predict_answer(
 
                 score = float(start_scores[start_index] + end_scores[end_index])
 
-                if best_score is None or score > best_score:
-                    best_score = score
-                    best_answer = {
+                candidates.append(
+                    {
                         "text": context[char_start:char_end],
                         "char_start": char_start,
                         "char_end": char_end,
                         "score": score,
                     }
+                )
 
-    return best_answer
+    candidates = sorted(
+        candidates,
+        key=lambda candidate: candidate["score"],
+        reverse=True,
+    )
 
+    selected = []
 
-
-def inputs_to_sequence_ids(tokenizer, input_ids):
-    """
-    Reconstructs sequence_ids for a single encoded example.
-
-    sequence_ids:
-    None = special tokens
-    0 = question
-    1 = context
-
-    Dla tokenizerów fast wygodniej byłoby użyć tokenized.sequence_ids(i),
-    ale po return_tensors tracimy BatchEncoding z tą metodą per feature
-    w prosty sposób, więc rekonstruujemy po token_type_ids jeśli są,
-    a dla DeBERTa fallback robimy przez special tokens.
-    """
-
-    # Dla BERT-like tokenizerów często są token_type_ids.
-    # Ale DeBERTa często ich nie używa, więc obsługujemy fallback.
-    tokens = tokenizer.convert_ids_to_tokens(input_ids.tolist())
-
-    sep_token = tokenizer.sep_token
-
-    sequence_ids = []
-    current_sequence = 0
-
-    sep_seen = 0
-
-    for token in tokens:
-        if token in {
-            tokenizer.cls_token,
-            tokenizer.sep_token,
-            tokenizer.pad_token,
-        }:
-            sequence_ids.append(None)
-
-            if token == sep_token:
-                sep_seen += 1
-                if sep_seen == 1:
-                    current_sequence = 1
-
+    for candidate in candidates:
+        if any(spans_overlap(candidate, previous) for previous in selected):
             continue
 
-        sequence_ids.append(current_sequence)
+        selected.append(candidate)
 
-    return sequence_ids
+        if len(selected) >= max_spans:
+            break
 
-
-def build_output_records(qa_examples, predictions_by_sample):
-    output_records = []
-
-    for sample_id, grouped in predictions_by_sample.items():
-        tokens = grouped["tokens"]
-        gold_spans = grouped["gold_spans"]
-        pred_spans = grouped["pred_spans"]
-        inference_times = grouped["inference_times"]
-
-        output_records.append(
-            {
-                "id": sample_id,
-                "tokens": tokens,
-                "gold_spans": gold_spans,
-                "pred_spans": pred_spans,
-                "inference_time_seconds": sum(inference_times),
-            }
-        )
-
-    return output_records
+    return selected
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/extractive_qa_trigger.yaml")
-    parser.add_argument(
-        "--split",
-        choices=["train", "val", "test"],
-        default="val",
-    )
-    parser.add_argument(
-        "--model_path",
-        default=None,
-        help="Path to trained model. If not given, uses training.output_dir_final.",
-    )
-    parser.add_argument(
-        "--output_path",
-        default=None,
-        help="Where to save JSONL predictions.",
-    )
+    parser.add_argument("--split", choices=["train", "val", "test"], default="val")
+    parser.add_argument("--model_path", default=None)
+    parser.add_argument("--event_predictions_path", default=None)
+    parser.add_argument("--output_path", default=None)
 
     args = parser.parse_args()
 
     with open(args.config, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    data_path = get_split_path(config, args.split)
+    raw_data_path = get_raw_split_path(config, args.split)
     model_path = args.model_path or config["training"]["output_dir_final"]
+
+    event_predictions_path = args.event_predictions_path
+    if event_predictions_path is None:
+        event_predictions_path = f"outputs/predictions/event_type_{args.split}.jsonl"
 
     output_path = args.output_path
     if output_path is None:
@@ -281,9 +255,22 @@ def main():
 
     max_length = config["training"].get("max_length", 384)
     doc_stride = config["training"].get("doc_stride", 128)
-    max_answer_length = config["training"].get("max_answer_length", 30)
+    max_answer_length = config["training"].get("max_answer_length", 8)
 
-    qa_examples = load_jsonl(data_path)
+    n_best_size = config.get("prediction", {}).get("n_best_size", 50)
+    max_spans_per_event_type = config.get("prediction", {}).get(
+        "max_spans_per_event_type",
+        1,
+    )
+
+    raw_samples = load_jsonl(raw_data_path)
+    event_predictions = load_jsonl(event_predictions_path)
+
+    if len(raw_samples) != len(event_predictions):
+        raise ValueError(
+            f"Raw samples and event predictions length mismatch: "
+            f"{len(raw_samples)} vs {len(event_predictions)}"
+        )
 
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     model = AutoModelForQuestionAnswering.from_pretrained(model_path)
@@ -292,82 +279,94 @@ def main():
     model.to(device)
     model.eval()
 
-    predictions_by_sample = {}
+    output_records = []
     sample_times = []
 
-    for example in qa_examples:
-        start_time = time.perf_counter()
+    for record_index, (sample, event_pred) in enumerate(
+        zip(raw_samples, event_predictions)
+    ):
+        sample_start = time.perf_counter()
 
-        answer = predict_answer(
-            model=model,
-            tokenizer=tokenizer,
-            question=example["question"],
-            context=example["context"],
-            device=device,
-            max_length=max_length,
-            doc_stride=doc_stride,
-            max_answer_length=max_answer_length,
-        )
+        tokens = sample["sentence"]
+        context, token_offsets = tokens_to_context_and_offsets(tokens)
 
-        end_time = time.perf_counter()
-        inference_time = end_time - start_time
-        sample_times.append(inference_time)
+        gold_spans = extract_gold_trigger_spans(sample)
+        pred_spans = []
 
-        sample_id = example["sample_id"]
+        predicted_event_types = event_pred.get("predicted_event_types", [])
 
-        if sample_id not in predictions_by_sample:
-            predictions_by_sample[sample_id] = {
-                "tokens": example["tokens"],
-                "gold_spans": [],
-                "pred_spans": [],
-                "inference_times": [],
-            }
+        for event_type in predicted_event_types:
+            if event_type not in EVENT_TYPE_TO_QUESTION:
+                continue
 
-        predictions_by_sample[sample_id]["gold_spans"].append(
-            example["gold_trigger"]
-        )
+            question = EVENT_TYPE_TO_QUESTION[event_type]
 
-        if answer["char_start"] is not None and answer["char_end"] is not None:
-            token_start, token_end = char_span_to_token_span(
-                char_start=answer["char_start"],
-                char_end=answer["char_end"],
-                token_offsets=example["token_offsets"],
+            answers = predict_n_best_answers(
+                model=model,
+                tokenizer=tokenizer,
+                question=question,
+                context=context,
+                device=device,
+                max_length=max_length,
+                doc_stride=doc_stride,
+                max_answer_length=max_answer_length,
+                n_best_size=n_best_size,
+                max_spans=max_spans_per_event_type,
             )
 
-            if token_start is not None and token_end is not None:
-                predictions_by_sample[sample_id]["pred_spans"].append(
+            for answer in answers:
+                token_start, token_end = char_span_to_token_span(
+                    char_start=answer["char_start"],
+                    char_end=answer["char_end"],
+                    token_offsets=token_offsets,
+                )
+
+                if token_start is None or token_end is None:
+                    continue
+
+                pred_spans.append(
                     {
                         "label": "TRIGGER",
                         "start": token_start,
                         "end": token_end,
                         "text": answer["text"],
-                        "event_type": example["event_type"],
+                        "event_type": event_type,
                         "score": answer["score"],
                     }
                 )
 
-        predictions_by_sample[sample_id]["inference_times"].append(inference_time)
+        sample_end = time.perf_counter()
+        inference_time = sample_end - sample_start
+        sample_times.append(inference_time)
 
-    output_records = build_output_records(
-        qa_examples=qa_examples,
-        predictions_by_sample=predictions_by_sample,
-    )
+        output_records.append(
+            {
+                "id": record_index,
+                "sample_id": sample.get("id", record_index),
+                "tokens": tokens,
+                "gold_spans": gold_spans,
+                "pred_spans": pred_spans,
+                "predicted_event_types": predicted_event_types,
+                "event_type_scores": event_pred.get("scores", {}),
+                "inference_time_seconds": inference_time,
+            }
+        )
 
     save_jsonl(output_records, output_path)
 
     total_time = sum(sample_times)
 
     timing = {
-        "method": "extractive_qa_trigger",
+        "method": "extractive_qa_trigger_pipeline",
         "split": args.split,
-        "num_qa_examples": len(sample_times),
-        "num_output_records": len(output_records),
+        "num_samples": len(sample_times),
         "total_inference_time_seconds": total_time,
         "avg_inference_time_seconds": total_time / len(sample_times),
         "median_inference_time_seconds": statistics.median(sample_times),
         "min_inference_time_seconds": min(sample_times),
         "max_inference_time_seconds": max(sample_times),
         "model_path": model_path,
+        "event_predictions_path": event_predictions_path,
         "device": str(device),
     }
 

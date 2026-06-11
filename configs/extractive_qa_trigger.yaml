@@ -1,21 +1,30 @@
 model:
-  name: microsoft/deberta-v3-base
+  name: deepset/roberta-base-squad2
 
 data:
   train_path: data/processed/extractive_qa_trigger/train.jsonl
   val_path: data/processed/extractive_qa_trigger/val.jsonl
   test_path: data/processed/extractive_qa_trigger/test.jsonl
 
+raw_data:
+  train_path: data/raw/train_main.json
+  val_path: data/raw/val_main.json
+  test_path: data/raw/test_main.json
+
 training:
   output_dir: outputs/models/extractive_qa_trigger
   output_dir_final: outputs/models/extractive_qa_trigger/final
 
-  num_train_epochs: 2
-  learning_rate: 0.00003
+  num_train_epochs: 3
+  learning_rate: 0.00002
   per_device_train_batch_size: 8
   per_device_eval_batch_size: 8
   weight_decay: 0.01
 
   max_length: 384
   doc_stride: 128
-  max_answer_length: 30
+  max_answer_length: 8
+
+prediction:
+  n_best_size: 50
+  max_spans_per_event_type: 1
