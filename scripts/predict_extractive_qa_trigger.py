@@ -76,7 +76,7 @@ def predict_answer(
     doc_stride=128,
     max_answer_length=30,
 ):
-    inputs = tokenizer(
+    tokenized = tokenizer(
         question,
         context,
         truncation="only_second",
@@ -88,17 +88,20 @@ def predict_answer(
         return_tensors="pt",
     )
 
-    offset_mapping = inputs.pop("offset_mapping")
-    input_ids = inputs["input_ids"]
-    attention_mask = inputs["attention_mask"]
+    sequence_ids_per_feature = [
+        tokenized.sequence_ids(i)
+        for i in range(tokenized["input_ids"].shape[0])
+    ]
 
-    inputs = {
+    offset_mapping = tokenized.pop("offset_mapping")
+
+    model_inputs = {
         key: value.to(device)
-        for key, value in inputs.items()
+        for key, value in tokenized.items()
     }
 
     with torch.no_grad():
-        outputs = model(**inputs)
+        outputs = model(**model_inputs)
 
     start_logits = outputs.start_logits.cpu()
     end_logits = outputs.end_logits.cpu()
@@ -111,20 +114,22 @@ def predict_answer(
         "score": None,
     }
 
-    for feature_idx in range(input_ids.shape[0]):
-        sequence_ids = inputs_to_sequence_ids(
-            tokenizer=tokenizer,
-            input_ids=input_ids[feature_idx],
-        )
-
+    for feature_idx in range(model_inputs["input_ids"].shape[0]):
+        sequence_ids = sequence_ids_per_feature[feature_idx]
         offsets = offset_mapping[feature_idx].tolist()
 
         start_scores = start_logits[feature_idx]
         end_scores = end_logits[feature_idx]
 
-        # top-k zamiast pełnej macierzy, żeby było prościej i szybciej
-        start_indexes = torch.topk(start_scores, k=min(20, len(start_scores))).indices.tolist()
-        end_indexes = torch.topk(end_scores, k=min(20, len(end_scores))).indices.tolist()
+        start_indexes = torch.topk(
+            start_scores,
+            k=min(20, len(start_scores)),
+        ).indices.tolist()
+
+        end_indexes = torch.topk(
+            end_scores,
+            k=min(20, len(end_scores)),
+        ).indices.tolist()
 
         for start_index in start_indexes:
             for end_index in end_indexes:
@@ -145,9 +150,6 @@ def predict_answer(
                 char_start, _ = offsets[start_index]
                 _, char_end = offsets[end_index]
 
-                if char_start is None or char_end is None:
-                    continue
-
                 if char_start == char_end:
                     continue
 
@@ -163,7 +165,6 @@ def predict_answer(
                     }
 
     return best_answer
-
 
 def inputs_to_sequence_ids(tokenizer, input_ids):
     """
