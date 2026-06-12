@@ -134,3 +134,235 @@ def convert_sample_to_trigger_qa(sample: Dict) -> List[Dict]:
         )
 
     return qa_examples
+
+MAIN_ARGUMENT_LABELS = ["SUBJECT", "TREATMENT", "EFFECT"]
+
+RAW_MAIN_ARGUMENT_TO_LABEL = {
+    "Subject": "SUBJECT",
+    "Treatment": "TREATMENT",
+    "Effect": "EFFECT",
+}
+
+MAIN_ARGUMENT_QUESTIONS = {
+    "SUBJECT": 'Who or what is involved in the event triggered by "{trigger_text}"?',
+    "TREATMENT": 'What treatment is involved in the event triggered by "{trigger_text}"?',
+    "EFFECT": 'What effect is described in the event triggered by "{trigger_text}"?',
+}
+
+
+def token_span_distance(span_a, span_b):
+    if span_a["end"] < span_b["start"]:
+        return span_b["start"] - span_a["end"]
+
+    if span_b["end"] < span_a["start"]:
+        return span_a["start"] - span_b["end"]
+
+    return 0
+
+
+def extract_gold_events(sample):
+    tokens = sample["sentence"]
+    context, token_offsets = tokens_to_context_and_offsets(tokens)
+
+    gold_events = []
+
+    for event_idx, event in enumerate(sample["event"]):
+        event_type = None
+        trigger_span = None
+        main_arguments = []
+
+        for start, end, raw_label in event:
+            if raw_label in TRIGGER_LABEL_TO_EVENT_TYPE:
+                event_type = TRIGGER_LABEL_TO_EVENT_TYPE[raw_label]
+
+                char_start, char_end = token_span_to_char_span(
+                    start_token=start,
+                    end_token=end,
+                    offsets=token_offsets,
+                )
+
+                trigger_span = {
+                    "label": "TRIGGER",
+                    "start": start,
+                    "end": end,
+                    "text": context[char_start:char_end],
+                    "event_type": event_type,
+                }
+
+            if raw_label in RAW_MAIN_ARGUMENT_TO_LABEL:
+                label = RAW_MAIN_ARGUMENT_TO_LABEL[raw_label]
+
+                char_start, char_end = token_span_to_char_span(
+                    start_token=start,
+                    end_token=end,
+                    offsets=token_offsets,
+                )
+
+                main_arguments.append(
+                    {
+                        "label": label,
+                        "start": start,
+                        "end": end,
+                        "text": context[char_start:char_end],
+                        "char_start": char_start,
+                        "char_end": char_end,
+                    }
+                )
+
+        if event_type is None or trigger_span is None:
+            continue
+
+        gold_events.append(
+            {
+                "event_idx": event_idx,
+                "event_type": event_type,
+                "trigger": trigger_span,
+                "main_arguments": main_arguments,
+            }
+        )
+
+    return gold_events
+
+
+def match_predicted_trigger_to_gold_event(pred_trigger, gold_events):
+    same_type_events = [
+        event
+        for event in gold_events
+        if event["event_type"] == pred_trigger.get("event_type")
+    ]
+
+    if not same_type_events:
+        return None
+
+    return min(
+        same_type_events,
+        key=lambda event: token_span_distance(
+            pred_trigger,
+            event["trigger"],
+        ),
+    )
+
+
+def convert_sample_to_main_argument_qa(sample, predicted_triggers, record_index=None):
+    tokens = sample["sentence"]
+    context, token_offsets = tokens_to_context_and_offsets(tokens)
+    gold_events = extract_gold_events(sample)
+
+    qa_examples = []
+
+    for pred_trigger_idx, pred_trigger in enumerate(predicted_triggers):
+        matched_event = match_predicted_trigger_to_gold_event(
+            pred_trigger=pred_trigger,
+            gold_events=gold_events,
+        )
+
+        trigger_text = pred_trigger.get("text")
+        if not trigger_text:
+            trigger_text = " ".join(
+                tokens[pred_trigger["start"] : pred_trigger["end"] + 1]
+            )
+
+        for argument_label in MAIN_ARGUMENT_LABELS:
+            question = MAIN_ARGUMENT_QUESTIONS[argument_label].format(
+                trigger_text=trigger_text
+            )
+
+            matching_arguments = []
+
+            if matched_event is not None:
+                matching_arguments = [
+                    argument
+                    for argument in matched_event["main_arguments"]
+                    if argument["label"] == argument_label
+                ]
+
+            if matching_arguments:
+                for argument_idx, argument in enumerate(matching_arguments):
+                    qa_examples.append(
+                        {
+                            "id": (
+                                f"{sample.get('id', record_index)}_"
+                                f"predtrig{pred_trigger_idx}_"
+                                f"{argument_label}_{argument_idx}"
+                            ),
+                            "sample_id": sample.get("id", record_index),
+                            "record_index": record_index,
+                            "task": "main_argument_extraction",
+                            "argument_label": argument_label,
+                            "question": question,
+                            "context": context,
+                            "answers": {
+                                "text": [argument["text"]],
+                                "answer_start": [argument["char_start"]],
+                            },
+                            "tokens": tokens,
+                            "token_offsets": token_offsets,
+                            "predicted_trigger": pred_trigger,
+                            "matched_gold_event_idx": (
+                                matched_event["event_idx"]
+                                if matched_event is not None
+                                else None
+                            ),
+                        }
+                    )
+            else:
+                qa_examples.append(
+                    {
+                        "id": (
+                            f"{sample.get('id', record_index)}_"
+                            f"predtrig{pred_trigger_idx}_"
+                            f"{argument_label}_no_answer"
+                        ),
+                        "sample_id": sample.get("id", record_index),
+                        "record_index": record_index,
+                        "task": "main_argument_extraction",
+                        "argument_label": argument_label,
+                        "question": question,
+                        "context": context,
+                        "answers": {
+                            "text": [],
+                            "answer_start": [],
+                        },
+                        "tokens": tokens,
+                        "token_offsets": token_offsets,
+                        "predicted_trigger": pred_trigger,
+                        "matched_gold_event_idx": (
+                            matched_event["event_idx"]
+                            if matched_event is not None
+                            else None
+                        ),
+                    }
+                )
+
+    return qa_examples
+
+
+def extract_gold_main_argument_spans(sample):
+    tokens = sample["sentence"]
+    context, token_offsets = tokens_to_context_and_offsets(tokens)
+
+    gold_spans = []
+
+    for event in sample["event"]:
+        for start, end, raw_label in event:
+            if raw_label not in RAW_MAIN_ARGUMENT_TO_LABEL:
+                continue
+
+            label = RAW_MAIN_ARGUMENT_TO_LABEL[raw_label]
+
+            char_start, char_end = token_span_to_char_span(
+                start_token=start,
+                end_token=end,
+                offsets=token_offsets,
+            )
+
+            gold_spans.append(
+                {
+                    "label": label,
+                    "start": start,
+                    "end": end,
+                    "text": context[char_start:char_end],
+                } 
+            )
+
+    return gold_spans
