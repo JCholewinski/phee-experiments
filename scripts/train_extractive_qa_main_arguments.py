@@ -96,8 +96,7 @@ def prepare_train_features(examples, tokenizer, max_length, doc_stride):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/extractive_qa_trigger.yaml")
-    args = parser.parse_args()
+    parser.add_argument("--config", default="configs/extractive_qa_main_arguments.yaml")
 
     with open(args.config, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
@@ -174,7 +173,7 @@ def main():
     Path("outputs/timing").mkdir(parents=True, exist_ok=True)
 
     timing = {
-        "method": "extractive_qa_trigger",
+        "method": "extractive_qa_main_arguments",
         "train_runtime_seconds": end - start,
         "model_name": config["model"]["name"],
         "train_examples": len(train_records),
@@ -182,7 +181,7 @@ def main():
         "output_dir_final": final_output_dir,
     }
 
-    timing_output_path = Path("outputs/timing/extractive_qa_trigger_training_timing.json")
+    timing_output_path = Path("outputs/timing/extractive_qa_main_arguments_training_timing.json")
 
     with open(timing_output_path, "w", encoding="utf-8") as f:
         json.dump(timing, f, indent=2, ensure_ascii=False)
