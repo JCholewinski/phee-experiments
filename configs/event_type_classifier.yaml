@@ -1,5 +1,5 @@
 model:
-  name: roberta-base
+  name: deepset/roberta-base-squad2
 
 data:
   train_path: data/raw/train_main.json
