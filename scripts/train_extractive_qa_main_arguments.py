@@ -97,6 +97,7 @@ def prepare_train_features(examples, tokenizer, max_length, doc_stride):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/extractive_qa_main_arguments.yaml")
+    args = parser.parse_args()
 
     with open(args.config, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
