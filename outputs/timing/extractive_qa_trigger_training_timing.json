@@ -1,0 +1,8 @@
+{
+  "method": "extractive_qa_trigger",
+  "train_runtime_seconds": 197.6240925029997,
+  "model_name": "deepset/roberta-base-squad2",
+  "train_examples": 3500,
+  "val_examples": 760,
+  "output_dir_final": "outputs/models/extractive_qa_trigger/final"
+}

@@ -1,0 +1,13 @@
+{
+  "method": "event_type_classifier",
+  "split": "train",
+  "num_samples": 3378,
+  "total_inference_time_seconds": 19.790342174324905,
+  "avg_inference_time_seconds": 0.005858597446514182,
+  "median_inference_time_seconds": 0.005654191998473834,
+  "min_inference_time_seconds": 0.005206193003687076,
+  "max_inference_time_seconds": 0.21389226699830033,
+  "model_path": "outputs/models/event_type_classifier/final",
+  "device": "cuda",
+  "threshold": 0.5
+}

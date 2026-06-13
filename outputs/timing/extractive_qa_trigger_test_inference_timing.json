@@ -1,0 +1,13 @@
+{
+  "method": "extractive_qa_trigger_pipeline",
+  "split": "test",
+  "num_samples": 725,
+  "total_inference_time_seconds": 6.843161618016893,
+  "avg_inference_time_seconds": 0.009438843611057783,
+  "median_inference_time_seconds": 0.008922277003875934,
+  "min_inference_time_seconds": 0.007917829003417864,
+  "max_inference_time_seconds": 0.22695676000148524,
+  "model_path": "outputs/models/extractive_qa_trigger/final",
+  "event_predictions_path": "outputs/predictions/event_type_test.jsonl",
+  "device": "cuda"
+}

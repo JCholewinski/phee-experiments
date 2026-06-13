@@ -1,0 +1,13 @@
+{
+  "method": "extractive_qa_main_arguments_pipeline",
+  "split": "test",
+  "num_samples": 725,
+  "total_inference_time_seconds": 22.954545285887434,
+  "avg_inference_time_seconds": 0.03166144177363784,
+  "median_inference_time_seconds": 0.029434648997266777,
+  "min_inference_time_seconds": 0.02404364600079134,
+  "max_inference_time_seconds": 0.2374924369942164,
+  "model_path": "outputs/models/extractive_qa_main_arguments/final",
+  "trigger_predictions_path": "outputs/predictions/extractive_qa_trigger_test.jsonl",
+  "device": "cuda"
+}

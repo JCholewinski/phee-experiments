@@ -1,0 +1,8 @@
+{
+  "method": "event_type_classifier",
+  "train_runtime_seconds": 36.20445214599022,
+  "model_name": "deepset/roberta-base-squad2",
+  "train_examples": 3378,
+  "val_examples": 724,
+  "output_dir_final": "outputs/models/event_type_classifier/final"
+}

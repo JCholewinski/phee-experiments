@@ -1,0 +1,60 @@
+{
+  "overall": {
+    "precision": 0.7170236753100339,
+    "recall": 0.6680672268907563,
+    "f1": 0.6916802610114193,
+    "tp": 1272,
+    "fp": 502,
+    "fn": 632
+  },
+  "per_label": {
+    "EFFECT": {
+      "precision": 0.7397058823529412,
+      "recall": 0.6862210095497954,
+      "f1": 0.7119603680113235,
+      "tp": 503,
+      "fp": 177,
+      "fn": 230
+    },
+    "SUBJECT": {
+      "precision": 0.7092391304347826,
+      "recall": 0.6832460732984293,
+      "f1": 0.6960000000000001,
+      "tp": 261,
+      "fp": 107,
+      "fn": 121
+    },
+    "TREATMENT": {
+      "precision": 0.699724517906336,
+      "recall": 0.6438529784537389,
+      "f1": 0.6706270627062706,
+      "tp": 508,
+      "fp": 218,
+      "fn": 281
+    }
+  },
+  "trigger_identification": {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0
+  },
+  "trigger_classification": {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0
+  },
+  "event_classification": {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0
+  }
+}
