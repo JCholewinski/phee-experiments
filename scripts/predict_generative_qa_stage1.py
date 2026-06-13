@@ -3,6 +3,7 @@ import json
 import statistics
 import time
 from pathlib import Path
+from tqdm.auto import tqdm
 
 import torch
 import yaml
@@ -53,10 +54,14 @@ def main():
     model.to(device)
     model.eval()
 
+    print(f"Model loaded on device: {device}", flush=True)
+    print(f"Number of samples: {len(samples)}", flush=True)
+    print(f"max_new_tokens: {max_new_tokens}, num_beams: {num_beams}", flush=True)
+
     output_records = []
     sample_times = []
 
-    for idx, sample in enumerate(samples):
+    for idx, sample in enumerate(tqdm(samples, desc=f"Predicting stage1 {args.split}")):        
         start = time.perf_counter()
 
         input_text = build_stage1_input(sample)
@@ -67,12 +72,22 @@ def main():
             truncation=True,
         ).to(device)
 
+        print(f"[{idx + 1}/{len(samples)}] Starting generation...", flush=True)
+        generation_start = time.perf_counter()
+
         with torch.no_grad():
             generated_ids = model.generate(
                 **inputs,
                 max_new_tokens=max_new_tokens,
                 num_beams=num_beams,
             )
+
+        generation_end = time.perf_counter()
+        print(
+            f"[{idx + 1}/{len(samples)}] Generation finished in "
+            f"{generation_end - generation_start:.2f}s",
+            flush=True,
+        )
 
         generated_text = tokenizer.decode(
             generated_ids[0],
