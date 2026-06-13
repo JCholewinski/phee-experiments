@@ -366,3 +366,58 @@ def extract_gold_main_argument_spans(sample):
             )
 
     return gold_spans
+
+SUBARGUMENT_LABELS_BY_MAIN_ARGUMENT = {
+    "SUBJECT": [
+        "SUBJECT_AGE",
+        "SUBJECT_GENDER",
+        "SUBJECT_RACE",
+        "SUBJECT_POPULATION",
+        "SUBJECT_DISORDER",
+    ],
+    "TREATMENT": [
+        "TREATMENT_DRUG",
+        "TREATMENT_DOSAGE",
+        "TREATMENT_ROUTE",
+        "TREATMENT_FREQ",
+        "TREATMENT_DURATION",
+        "TREATMENT_TIME_ELAPSED",
+        "TREATMENT_DISORDER",
+        "COMBINATION_DRUG",
+    ],
+}
+
+RAW_SUBARGUMENT_TO_LABEL = {
+    "Subject.Age": "SUBJECT_AGE",
+    "Subject.Gender": "SUBJECT_GENDER",
+    "Subject.Race": "SUBJECT_RACE",
+    "Subject.Population": "SUBJECT_POPULATION",
+    "Subject.Disorder": "SUBJECT_DISORDER",
+
+    "Treatment.Drug": "TREATMENT_DRUG",
+    "Treatment.Dosage": "TREATMENT_DOSAGE",
+    "Treatment.Route": "TREATMENT_ROUTE",
+    "Treatment.Freq": "TREATMENT_FREQ",
+    "Treatment.Duration": "TREATMENT_DURATION",
+    "Treatment.Time_elapsed": "TREATMENT_TIME_ELAPSED",
+    "Treatment.Disorder": "TREATMENT_DISORDER",
+
+    "Combination.Drug": "COMBINATION_DRUG",
+}
+
+SUBARGUMENT_QUESTIONS = {
+    "SUBJECT_AGE": 'What is the age of the subject "{main_argument_text}"?',
+    "SUBJECT_GENDER": 'What is the gender of the subject "{main_argument_text}"?',
+    "SUBJECT_RACE": 'What is the race of the subject "{main_argument_text}"?',
+    "SUBJECT_POPULATION": 'What population describes the subject "{main_argument_text}"?',
+    "SUBJECT_DISORDER": 'What disorder describes the subject "{main_argument_text}"?',
+
+    "TREATMENT_DRUG": 'What drug is mentioned in the treatment "{main_argument_text}"?',
+    "TREATMENT_DOSAGE": 'What dosage is mentioned for the treatment "{main_argument_text}"?',
+    "TREATMENT_ROUTE": 'What route is mentioned for the treatment "{main_argument_text}"?',
+    "TREATMENT_FREQ": 'What frequency is mentioned for the treatment "{main_argument_text}"?',
+    "TREATMENT_DURATION": 'What duration is mentioned for the treatment "{main_argument_text}"?',
+    "TREATMENT_TIME_ELAPSED": 'What time elapsed is mentioned for the treatment "{main_argument_text}"?',
+    "TREATMENT_DISORDER": 'What disorder is treated by "{main_argument_text}"?',
+    "COMBINATION_DRUG": 'What drug is used in combination with the treatment "{main_argument_text}"?',
+}
