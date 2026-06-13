@@ -25,5 +25,6 @@ training:
   max_target_length: 256
 
 prediction:
-  max_new_tokens: 256
+  max_new_tokens: 128
   num_beams: 1
+  batch_size: 8

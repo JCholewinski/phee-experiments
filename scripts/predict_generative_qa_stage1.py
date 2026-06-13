@@ -61,19 +61,30 @@ def main():
     output_records = []
     sample_times = []
 
-    for idx, sample in enumerate(tqdm(samples, desc=f"Predicting stage1 {args.split}")):        
-        start = time.perf_counter()
+    progress_bar = tqdm(
+        total=len(samples),
+        desc=f"Predicting stage1 {args.split}",
+        unit="sample",
+    )
 
-        input_text = build_stage1_input(sample)
+    for batch_start in range(0, len(samples), batch_size):
+        batch_samples = samples[batch_start : batch_start + batch_size]
+        batch_indices = list(range(batch_start, batch_start + len(batch_samples)))
+
+        batch_start_time = time.perf_counter()
+
+        input_texts = [
+            build_stage1_input(sample)
+            for sample in batch_samples
+        ]
+
         inputs = tokenizer(
-            input_text,
+            input_texts,
             return_tensors="pt",
             max_length=max_source_length,
             truncation=True,
+            padding=True,
         ).to(device)
-
-        print(f"[{idx + 1}/{len(samples)}] Starting generation...", flush=True)
-        generation_start = time.perf_counter()
 
         with torch.no_grad():
             generated_ids = model.generate(
@@ -82,35 +93,49 @@ def main():
                 num_beams=num_beams,
             )
 
-        generation_end = time.perf_counter()
-        print(
-            f"[{idx + 1}/{len(samples)}] Generation finished in "
-            f"{generation_end - generation_start:.2f}s",
-            flush=True,
-        )
-
-        generated_text = tokenizer.decode(
-            generated_ids[0],
+        generated_texts = tokenizer.batch_decode(
+            generated_ids,
             skip_special_tokens=True,
         )
 
-        tokens = sample["sentence"]
-        gold_spans = extract_gold_stage1_spans(sample)
-        pred_spans = stage1_output_to_pred_spans(generated_text, tokens)
+        batch_end_time = time.perf_counter()
+        batch_time = batch_end_time - batch_start_time
+        avg_sample_time = batch_time / len(batch_samples)
 
-        end = time.perf_counter()
-        sample_times.append(end - start)
+        for idx, sample, input_text, generated_text in zip(
+            batch_indices,
+            batch_samples,
+            input_texts,
+            generated_texts,
+        ):
+            tokens = sample["sentence"]
+            gold_spans = extract_gold_stage1_spans(sample)
+            pred_spans = stage1_output_to_pred_spans(generated_text, tokens)
 
-        output_records.append({
-            "id": idx,
-            "sample_id": sample.get("id", idx),
-            "tokens": tokens,
-            "input_text": input_text,
-            "generated_text": generated_text,
-            "gold_spans": gold_spans,
-            "pred_spans": pred_spans,
-            "inference_time_seconds": end - start,
-        })
+            sample_times.append(avg_sample_time)
+
+            output_records.append(
+                {
+                    "id": idx,
+                    "sample_id": sample.get("id", idx),
+                    "tokens": tokens,
+                    "input_text": input_text,
+                    "generated_text": generated_text,
+                    "gold_spans": gold_spans,
+                    "pred_spans": pred_spans,
+                    "inference_time_seconds": avg_sample_time,
+                }
+            )
+
+        progress_bar.update(len(batch_samples))
+        progress_bar.set_postfix(
+            {
+                "batch_time": f"{batch_time:.1f}s",
+                "bs": len(batch_samples),
+            }
+        )
+
+    progress_bar.close()
 
     save_jsonl(output_records, output_path)
 
