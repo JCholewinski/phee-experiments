@@ -1,0 +1,34 @@
+model:
+  name: razent/SciFive-base-PMC
+
+data:
+  train_path: data/processed/generative_qa_stage2/train.jsonl
+  val_path: data/processed/generative_qa_stage2/val.jsonl
+  test_path: data/processed/generative_qa_stage2/test.jsonl
+
+raw_data:
+  train_path: data/raw/train_main.json
+  val_path: data/raw/val_main.json
+  test_path: data/raw/test_main.json
+
+stage1_predictions:
+  train_path: outputs/predictions/generative_qa_stage1_train.jsonl
+  val_path: outputs/predictions/generative_qa_stage1_val.jsonl
+  test_path: outputs/predictions/generative_qa_stage1_test.jsonl
+
+training:
+  output_dir: outputs/models/generative_qa_stage2
+  output_dir_final: outputs/models/generative_qa_stage2/final
+
+  num_train_epochs: 3
+  learning_rate: 0.00003
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  weight_decay: 0.01
+
+  max_source_length: 512
+  max_target_length: 128
+
+prediction:
+  max_new_tokens: 128
+  num_beams: 4
