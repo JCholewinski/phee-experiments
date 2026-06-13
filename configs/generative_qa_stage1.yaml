@@ -15,7 +15,7 @@ training:
   output_dir: outputs/models/generative_qa_stage1
   output_dir_final: outputs/models/generative_qa_stage1/final
 
-  num_train_epochs: 3
+  num_train_epochs: 5
   learning_rate: 0.00003
   per_device_train_batch_size: 4
   per_device_eval_batch_size: 4
@@ -26,4 +26,4 @@ training:
 
 prediction:
   max_new_tokens: 256
-  num_beams: 4
+  num_beams: 1
