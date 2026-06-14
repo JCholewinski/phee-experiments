@@ -1,0 +1,8 @@
+{
+  "method": "generative_qa_stage1",
+  "model_name": "razent/SciFive-base-PMC",
+  "train_examples": 3378,
+  "val_examples": 724,
+  "train_runtime_seconds": 361.0730096040061,
+  "output_dir_final": "outputs/models/generative_qa_stage1/final"
+}

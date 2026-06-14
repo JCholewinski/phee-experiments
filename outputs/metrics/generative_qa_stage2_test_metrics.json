@@ -1,0 +1,140 @@
+{
+  "overall": {
+    "precision": 0.7534464475079533,
+    "recall": 0.7275985663082437,
+    "f1": 0.7402969523313363,
+    "tp": 1421,
+    "fp": 465,
+    "fn": 532
+  },
+  "per_label": {
+    "COMBINATION_DRUG": {
+      "precision": 0.693069306930693,
+      "recall": 0.639269406392694,
+      "f1": 0.6650831353919239,
+      "tp": 140,
+      "fp": 62,
+      "fn": 79
+    },
+    "SUBJECT_AGE": {
+      "precision": 0.9313725490196079,
+      "recall": 0.8482142857142857,
+      "f1": 0.8878504672897195,
+      "tp": 95,
+      "fp": 7,
+      "fn": 17
+    },
+    "SUBJECT_DISORDER": {
+      "precision": 0.4375,
+      "recall": 0.25,
+      "f1": 0.3181818181818182,
+      "tp": 14,
+      "fp": 18,
+      "fn": 42
+    },
+    "SUBJECT_GENDER": {
+      "precision": 0.7976190476190477,
+      "recall": 0.881578947368421,
+      "f1": 0.8375,
+      "tp": 67,
+      "fp": 17,
+      "fn": 9
+    },
+    "SUBJECT_POPULATION": {
+      "precision": 0.6833333333333333,
+      "recall": 0.6721311475409836,
+      "f1": 0.6776859504132232,
+      "tp": 41,
+      "fp": 19,
+      "fn": 20
+    },
+    "SUBJECT_RACE": {
+      "precision": 0.7777777777777778,
+      "recall": 1.0,
+      "f1": 0.8750000000000001,
+      "tp": 7,
+      "fp": 2,
+      "fn": 0
+    },
+    "TREATMENT_DISORDER": {
+      "precision": 0.6494464944649446,
+      "recall": 0.6666666666666666,
+      "f1": 0.6579439252336449,
+      "tp": 176,
+      "fp": 95,
+      "fn": 88
+    },
+    "TREATMENT_DOSAGE": {
+      "precision": 0.6216216216216216,
+      "recall": 0.647887323943662,
+      "f1": 0.6344827586206897,
+      "tp": 46,
+      "fp": 28,
+      "fn": 25
+    },
+    "TREATMENT_DRUG": {
+      "precision": 0.8606271777003485,
+      "recall": 0.8133918770581778,
+      "f1": 0.8363431151241535,
+      "tp": 741,
+      "fp": 120,
+      "fn": 170
+    },
+    "TREATMENT_DURATION": {
+      "precision": 0.38461538461538464,
+      "recall": 0.20833333333333334,
+      "f1": 0.2702702702702703,
+      "tp": 5,
+      "fp": 8,
+      "fn": 19
+    },
+    "TREATMENT_FREQ": {
+      "precision": 0.5,
+      "recall": 0.6363636363636364,
+      "f1": 0.56,
+      "tp": 7,
+      "fp": 7,
+      "fn": 4
+    },
+    "TREATMENT_ROUTE": {
+      "precision": 0.5420560747663551,
+      "recall": 0.6590909090909091,
+      "f1": 0.5948717948717949,
+      "tp": 58,
+      "fp": 49,
+      "fn": 30
+    },
+    "TREATMENT_TIME_ELAPSED": {
+      "precision": 0.42105263157894735,
+      "recall": 0.4528301886792453,
+      "f1": 0.43636363636363634,
+      "tp": 24,
+      "fp": 33,
+      "fn": 29
+    }
+  },
+  "trigger_identification": {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0
+  },
+  "trigger_classification": {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0
+  },
+  "event_classification": {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0
+  }
+}

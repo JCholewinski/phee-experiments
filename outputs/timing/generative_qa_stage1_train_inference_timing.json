@@ -1,0 +1,12 @@
+{
+  "method": "generative_qa_stage1",
+  "split": "train",
+  "num_samples": 3378,
+  "total_inference_time_seconds": 208.6233605761954,
+  "avg_inference_time_seconds": 0.061759431786913975,
+  "median_inference_time_seconds": 0.0595005311879504,
+  "min_inference_time_seconds": 0.03891346893760783,
+  "max_inference_time_seconds": 0.2513018434983678,
+  "model_path": "outputs/models/generative_qa_stage1/final",
+  "device": "cuda"
+}

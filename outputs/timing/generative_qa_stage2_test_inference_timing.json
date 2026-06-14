@@ -1,0 +1,14 @@
+{
+  "method": "generative_qa_stage2",
+  "split": "test",
+  "num_samples": 725,
+  "num_queries": 7746,
+  "total_inference_time_seconds": 113.64856519174646,
+  "avg_inference_time_seconds": 0.15675664164378822,
+  "median_inference_time_seconds": 0.14741498850344215,
+  "min_inference_time_seconds": 0.0,
+  "max_inference_time_seconds": 0.9446735553083272,
+  "model_path": "outputs/models/generative_qa_stage2/final",
+  "stage1_predictions_path": "outputs/predictions/generative_qa_stage1_test.jsonl",
+  "device": "cuda"
+}
