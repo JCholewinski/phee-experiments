@@ -31,4 +31,5 @@ training:
 
 prediction:
   max_new_tokens: 128
-  num_beams: 4
+  num_beams: 2
+  batch_size: 16

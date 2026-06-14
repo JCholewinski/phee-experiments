@@ -26,5 +26,5 @@ training:
 
 prediction:
   max_new_tokens: 128
-  num_beams: 1
-  batch_size: 8
+  num_beams: 2
+  batch_size: 16
