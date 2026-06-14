@@ -44,6 +44,7 @@ def main():
     max_source_length = config["training"].get("max_source_length", 512)
     max_new_tokens = config["prediction"].get("max_new_tokens", 256)
     num_beams = config["prediction"].get("num_beams", 4)
+    batch_size = config["prediction"].get("batch_size", 8)
 
     samples = load_jsonl(raw_path)
 
