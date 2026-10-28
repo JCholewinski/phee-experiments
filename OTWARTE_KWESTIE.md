@@ -26,10 +26,9 @@ Stan na 28.10.2026, koniec sesji implementacji (przerwanej z powodu limitu kredy
 
 6. Niezależny przegląd kodu (osobny agent) został przerwany przed końcem; jego
    dotychczasowe uwagi są poniżej (jeśli zdążył je zwrócić).
-7. Pełny smoke test po ostatnich zmianach (ładowanie modeli, LLM, tabele) był w trakcie;
-   12 z 16 konfiguracji przeszło bez błędów (wcześniejsza wersja przeszła wszystkie 16). Przed startem na vast.ai:
-   `python scripts/smoke/make_tiny_models.py && python scripts/smoke/run_smoke.py`
-   (CPU, kilka minut).
+7. Pełny smoke test po ostatnich zmianach przeszedł we wszystkich 16 konfiguracjach
+   (CPU, małe losowe modele). Powtórka: `python scripts/smoke/make_tiny_models.py &&
+   python scripts/smoke/run_smoke.py`.
 
 ## Koszt
 
