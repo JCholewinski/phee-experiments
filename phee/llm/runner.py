@@ -124,16 +124,18 @@ def run(config, seed, run_dir):
     for shots in shots_list:
         for split in splits:
             samples = data[split]
-            if shots:
-                demonstrations = [
-                    [data["train"][i] for i in reversed(retriever.top(sample["context"], shots))]
-                    for sample in samples
-                ]
-            else:
-                demonstrations = [[] for _ in samples]
-            prompts = _prompts(backend.tokenizer, samples, demonstrations, model_config.get("chat_template_kwargs"))
-            log(f"llm: {shots}-shot on {split} ({len(prompts)} prompts)")
+            log(f"llm: {shots}-shot on {split} ({len(samples)} sentences)")
+            # timed from raw text: demonstration retrieval, prompt building and generation
             with GpuMemory() as memory, Timer() as timer:
+                if shots:
+                    # most similar demonstration last (closest to the query)
+                    demonstrations = [
+                        [data["train"][i] for i in reversed(retriever.top(sample["context"], shots))]
+                        for sample in samples
+                    ]
+                else:
+                    demonstrations = [[] for _ in samples]
+                prompts = _prompts(backend.tokenizer, samples, demonstrations, model_config.get("chat_template_kwargs"))
                 texts, lengths = backend.generate(prompts)
             records = []
             invalid = 0

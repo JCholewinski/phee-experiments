@@ -175,6 +175,11 @@ def predict_answers(model, tokenizer, examples, settings, max_answer_length=30,
                 if e < s or e - s + 1 > max_answer_length:
                     continue
                 char_start, char_end = offsets[s][0], offsets[e][1]
+                # byte-level BPE offsets may include the preceding space
+                while char_start < char_end and context[char_start].isspace():
+                    char_start += 1
+                while char_end > char_start and context[char_end - 1].isspace():
+                    char_end -= 1
                 if char_end <= char_start:
                     continue
                 candidates[example_index].append({

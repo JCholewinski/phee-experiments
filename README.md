@@ -75,10 +75,18 @@ hf auth login          # starsze wersje huggingface_hub: huggingface-cli login
 
 Pozostałe modele (BioBERT, Bio-ModernBERT, SciFive) są dostępne bez logowania.
 
-### 3. Test na małych modelach (opcjonalnie, kilka minut, CPU wystarczy)
+### 3. Testy (opcjonalnie, CPU wystarczy)
 
-Sprawdza, czy wszystkie warianty przechodzą cały pipeline (trening, early stopping,
-predykcja, ewaluacja). Wyniki są bez znaczenia, bo modele są losowe.
+Testy logiki niezależnej od modeli (ewaluacja, schematy etykiet, parsery, CRF i Viterbi
+porównane z pełnym przeglądem ścieżek, ograniczone dekodowanie na prawdziwych tokenizerach):
+
+```bash
+pip install pytest
+python -m pytest tests -q
+```
+
+Test całego pipeline'u na małych, losowych modelach (kilka minut): sprawdza, czy wszystkie
+warianty przechodzą trening, early stopping, predykcję i ewaluację. Wyniki są bez znaczenia.
 
 ```bash
 pip install tokenizers sentencepiece
@@ -111,6 +119,11 @@ tail -f matrix.log
 python scripts/run_matrix.py --list          # co zrobione, co zostało
 ```
 
+- Przebiegi trwają różnie: SL kilka minut, extractive QA kilkadziesiąt minut, generative QA
+  najdłużej (generowanie na dev po każdej epoce). Dokładny czas epoki widać w szybkim
+  teście z punktu 4. Żeby skrócić early stopping w generative QA, można oceniać po każdej
+  epoce tylko część dev: `--set early_stopping_dev_limit=300` (końcowe wyniki na dev i
+  teście są zawsze liczone na całych zbiorach).
 - Każdy przebieg działa w osobnym procesie; log: `results/logs/<eksperyment>__seed<N>.log`.
 - Skończony przebieg ma plik `DONE` i jest pomijany, więc po przerwaniu (np. restart
   instancji) wystarczy uruchomić to samo polecenie ponownie.

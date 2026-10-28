@@ -2,17 +2,25 @@
 original spacing in front of it, so sub-words look like in running text) and the model
 reads the first sub-word of every word."""
 
-import torch
-
 
 class WordEncoder:
     def __init__(self, tokenizer, max_length=512):
         self.tokenizer = tokenizer
         self.max_length = max_length
+        # The special tokens around a sequence ([CLS] ... [SEP]) are taken from a normal
+        # tokenizer call: build_inputs_with_special_tokens() of a generic fast tokenizer
+        # (e.g. ModernBERT) does not add them.
         probe = tokenizer("medication", add_special_tokens=False)["input_ids"]
-        built = tokenizer.build_inputs_with_special_tokens(probe)
-        self.prefix = built.index(probe[0])
-        self.num_special = len(built) - len(probe)
+        full = tokenizer("medication")["input_ids"]
+        start = next(
+            (i for i in range(len(full) - len(probe) + 1) if full[i:i + len(probe)] == probe), None
+        )
+        if start is None:
+            raise ValueError("Cannot locate the special-token template of the tokenizer")
+        self.prefix_ids = full[:start]
+        self.suffix_ids = full[start + len(probe):]
+        self.prefix = len(self.prefix_ids)
+        self.num_special = len(self.prefix_ids) + len(self.suffix_ids)
 
     def encode(self, sample):
         tokens = sample["tokens"]
@@ -34,7 +42,7 @@ class WordEncoder:
             word_positions.append(self.prefix + len(ids))
             valid_words.append(index)
             ids.extend(word_ids)
-        input_ids = self.tokenizer.build_inputs_with_special_tokens(ids)
+        input_ids = self.prefix_ids + ids + self.suffix_ids
         return {
             "input_ids": input_ids,
             "word_positions": word_positions,
@@ -43,6 +51,8 @@ class WordEncoder:
 
 
 def make_collate(pad_token_id):
+    import torch
+
     def collate(items):
         batch_size = len(items)
         max_tokens = max(len(item["input_ids"]) for item in items)

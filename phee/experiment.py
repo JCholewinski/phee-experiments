@@ -20,6 +20,18 @@ def load_splits(config, splits=("train", "dev", "test")):
     }
 
 
+def early_stopping_dev(config, data):
+    """Dev sentences used for the per-epoch evaluation (early stopping). The full dev
+    set by default; `early_stopping_dev_limit: N` uses N evenly spaced sentences to save
+    time (final dev results are always computed on the full dev set)."""
+    limit = config.get("early_stopping_dev_limit")
+    dev = data["dev"]
+    if not limit or limit >= len(dev):
+        return dev
+    step = len(dev) / limit
+    return [dev[int(i * step)] for i in range(limit)]
+
+
 def environment_info():
     info = {"python": platform.python_version(), "time": time.strftime("%Y-%m-%d %H:%M:%S")}
     try:

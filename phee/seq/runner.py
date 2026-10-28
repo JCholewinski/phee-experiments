@@ -16,7 +16,7 @@ from collections import defaultdict
 import torch
 
 from phee.evaluation import score_families
-from phee.experiment import RunRecorder, load_splits
+from phee.experiment import RunRecorder, early_stopping_dev, load_splits
 from phee.hf import count_parameters, load_encoder, load_tokenizer
 from phee.seq.decoding import decode, native_decoding
 from phee.seq.encoding import WordEncoder, make_collate
@@ -130,6 +130,7 @@ def run(config, seed, run_dir):
     decodings = config.get("decodings", ["argmax"])
     levels = _levels(config["scheme"])
     recorder = RunRecorder(run_dir, config, seed)
+    es_dev = early_stopping_dev(config, data)
 
     tokenizer = load_tokenizer(model_config["name"])
     encoder_helper = WordEncoder(tokenizer, max_length=model_config.get("max_length", 512))
@@ -143,7 +144,7 @@ def run(config, seed, run_dir):
     for level in levels:
         log(f"seq/{config['scheme']}: training level '{level['name']}' ({model_config['head']} head)")
         train_items = _build_items(data["train"], encoder_helper, level, with_labels=True)
-        dev_items = _build_items(data["dev"], encoder_helper, level, with_labels=False)
+        es_items = _build_items(es_dev, encoder_helper, level, with_labels=False)
 
         set_seed(seed)  # the new head is initialised with this seed
         encoder = load_encoder(
@@ -162,12 +163,12 @@ def run(config, seed, run_dir):
         )
 
         def evaluate_dev(current_model, level=level):
-            emissions = _emissions(current_model, dev_items, collate, settings["eval_batch_size"], settings["precision"])
+            emissions = _emissions(current_model, es_items, collate, settings["eval_batch_size"], settings["precision"])
             preds = _decode_predictions(
-                current_model, data["dev"], dev_items, emissions, level, native_decoding(current_model)
+                current_model, es_dev, es_items, emissions, level, native_decoding(current_model)
             )
-            records = [{"id": s["id"], "pred": p} for s, p in zip(data["dev"], preds)]
-            return score_families(data["dev"], records, level["families"])
+            records = [{"id": s["id"], "pred": p} for s, p in zip(es_dev, preds)]
+            return score_families(es_dev, records, level["families"])
 
         model, report = train_model(
             model, train_items, collate, evaluate_dev, settings, seed, name=f"seq_{level['name']}"
@@ -176,8 +177,9 @@ def run(config, seed, run_dir):
         recorder.add_stage(report)
 
         for split in ("dev", "test"):
-            items = dev_items if split == "dev" else _build_items(data[split], encoder_helper, level, with_labels=False)
+            # timed from raw text (tokenization included), as in the QA pipelines
             with GpuMemory() as memory, Timer() as forward_timer:
+                items = _build_items(data[split], encoder_helper, level, with_labels=False)
                 emissions = _emissions(model, items, collate, settings["eval_batch_size"], settings["precision"])
             for strategy in decodings:
                 with Timer() as decode_timer:

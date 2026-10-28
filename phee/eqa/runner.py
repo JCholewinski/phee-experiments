@@ -32,7 +32,7 @@ from phee.eqa import event_type as event_type_stage
 from phee.eqa.qa import accepts_token_type_ids, make_collate, predict_answers, train_features
 from phee.eqa.templates import main_question, sub_question, trigger_question
 from phee.evaluation import score_families
-from phee.experiment import RunRecorder, load_splits
+from phee.experiment import RunRecorder, early_stopping_dev, load_splits
 from phee.hf import count_parameters, load_tokenizer
 from phee.io import deep_update
 from phee.schema import MAIN_LABELS, SUB_LABELS_BY_PARENT
@@ -304,6 +304,7 @@ def run(config, seed, run_dir):
     event_config = {"threshold": 0.5, "force_one": True, "max_length": 256}
     event_config.update(config.get("event_type") or {})
     recorder = RunRecorder(run_dir, config, seed)
+    es_dev = early_stopping_dev(config, data)
     tokenizer = load_tokenizer(model_config["name"])
     pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
     load_kwargs = {"attn_implementation": model_config["attn_implementation"]} if model_config.get("attn_implementation") else {}
@@ -328,8 +329,8 @@ def run(config, seed, run_dir):
     model, report = train_model(
         model, train_items, event_type_stage.make_collate(pad_id),
         lambda m: event_type_stage.score(
-            data["dev"],
-            event_type_stage.predict(m, tokenizer, data["dev"], settings, event_config["threshold"],
+            es_dev,
+            event_type_stage.predict(m, tokenizer, es_dev, settings, event_config["threshold"],
                                      event_config["force_one"], event_config["max_length"]),
         ),
         settings, seed, name="eqa_event_type",
@@ -357,12 +358,12 @@ def run(config, seed, run_dir):
     qa_collate = make_collate(pad_id)
     max_length, stride = model_config.get("max_length", 384), model_config.get("stride", 128)
     train_items = train_features(trigger_training_examples(data["train"], templates), tokenizer, max_length, stride, use_types)
-    dev_gold_types = [sorted({event["event_type"] for event in sample["events"]}) for sample in data["dev"]]
+    dev_gold_types = [sorted({event["event_type"] for event in sample["events"]}) for sample in es_dev]
     model, report = train_model(
         model, train_items, qa_collate,
         lambda m: score_families(
-            data["dev"],
-            _records(data["dev"], predict_triggers(m, tokenizer, data["dev"], dev_gold_types, templates,
+            es_dev,
+            _records(es_dev, predict_triggers(m, tokenizer, es_dev, dev_gold_types, templates,
                                                    settings, answer_config["trigger"], model_config)),
             ["trigger_classification"],
         ),
@@ -388,12 +389,12 @@ def run(config, seed, run_dir):
         data["train"], templates, triggers["train"] if need_train_predictions else None
     )
     train_items = train_features(examples, tokenizer, max_length, stride, use_types)
-    dev_gold_triggers = gold_triggers(data["dev"])
+    dev_gold_triggers = gold_triggers(es_dev)
     model, report = train_model(
         model, train_items, qa_collate,
         lambda m: score_families(
-            data["dev"],
-            _records(data["dev"], predict_mains(m, tokenizer, data["dev"], dev_gold_triggers, templates,
+            es_dev,
+            _records(es_dev, predict_mains(m, tokenizer, es_dev, dev_gold_triggers, templates,
                                                 settings, answer_config["main"], model_config)),
             ["main_classification"],
         ),
@@ -419,12 +420,12 @@ def run(config, seed, run_dir):
         data["train"], templates, mains["train"] if need_train_predictions else None
     )
     train_items = train_features(examples, tokenizer, max_length, stride, use_types)
-    dev_gold_mains = gold_mains(data["dev"])
+    dev_gold_mains = gold_mains(es_dev)
     model, report = train_model(
         model, train_items, qa_collate,
         lambda m: score_families(
-            data["dev"],
-            _records(data["dev"], predict_subs(m, tokenizer, data["dev"], dev_gold_mains, templates,
+            es_dev,
+            _records(es_dev, predict_subs(m, tokenizer, es_dev, dev_gold_mains, templates,
                                                settings, answer_config["sub"], model_config)),
             ["sub_classification"],
         ),

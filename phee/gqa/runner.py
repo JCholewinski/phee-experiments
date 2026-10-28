@@ -22,7 +22,7 @@ import torch
 
 from phee.eqa.templates import sub_question
 from phee.evaluation import score_families
-from phee.experiment import RunRecorder, load_splits
+from phee.experiment import RunRecorder, early_stopping_dev, load_splits
 from phee.gqa.constrained import ConstraintBuilder
 from phee.gqa.format import (
     EVENT_MARKERS,
@@ -277,6 +277,7 @@ def run(config, seed, run_dir):
     generation = deep_update(DEFAULT_GENERATION, config.get("generation") or {})
     split_values = target_format == "authors"
     recorder = RunRecorder(run_dir, config, seed)
+    es_dev = early_stopping_dev(config, data)
 
     tokenizer = load_tokenizer(model_config["name"])
     pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
@@ -312,12 +313,12 @@ def run(config, seed, run_dir):
     set_seed(seed)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_config["name"], **load_kwargs)
     train_items = _stage1_items(data["train"], tokenizer, segment_tokenizer, target_format, generation)
-    dev_inputs = [build_input(STAGE1_QUESTION, sample["context"]) for sample in data["dev"]]
+    dev_inputs = [build_input(STAGE1_QUESTION, sample["context"]) for sample in es_dev]
 
     def evaluate_stage1(current_model):
-        texts = generate(current_model, dev_inputs, data["dev"], generation["stage1_max_new_tokens"])
+        texts = generate(current_model, dev_inputs, es_dev, generation["stage1_max_new_tokens"])
         triggers, mains = _stage1_predictions(texts, split_values)
-        return score_families(data["dev"], _records(data["dev"], triggers, mains),
+        return score_families(es_dev, _records(es_dev, triggers, mains),
                               ["trigger_classification", "main_classification"])
 
     model, report = train_model(model, train_items, _collate(pad_id), evaluate_stage1, settings, seed,
@@ -355,11 +356,11 @@ def run(config, seed, run_dir):
         data["train"], tokenizer, segment_tokenizer, templates, generation,
         train_mains if need_train_predictions else None,
     )
-    dev_gold_mains = _gold_mains(data["dev"])
+    dev_gold_mains = _gold_mains(es_dev)
 
     def evaluate_stage2(current_model):
-        subs = _predict_stage2(current_model, generate, data["dev"], dev_gold_mains, templates, generation, None)
-        return score_families(data["dev"], _records(data["dev"], subs), ["sub_classification"])
+        subs = _predict_stage2(current_model, generate, es_dev, dev_gold_mains, templates, generation, None)
+        return score_families(es_dev, _records(es_dev, subs), ["sub_classification"])
 
     model, report = train_model(model, train_items, _collate(pad_id), evaluate_stage2, settings, seed,
                                 name="gqa_stage2")
