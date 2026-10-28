@@ -4,7 +4,7 @@ Config (configs/seq/*.yaml):
   method: seq
   scheme: two_level | authors_flat
   model:
-    name: thomas-sounack/Bio-ModernBERT-base
+    name: thomas-sounack/BioClinical-ModernBERT-base
     head: linear | mlp | crf
     dropout, mlp_hidden_size, mlp_dropout, mlp_activation, crf_constrained, max_length
   training: see phee.training.DEFAULT_TRAINING (+ crf_learning_rate)
@@ -17,7 +17,7 @@ import torch
 
 from phee.evaluation import score_families
 from phee.experiment import RunRecorder, early_stopping_dev, load_splits
-from phee.hf import count_parameters, load_encoder, load_tokenizer
+from phee.hf import count_parameters, load_encoder, load_tokenizer, model_kwargs
 from phee.seq.decoding import decode, native_decoding
 from phee.seq.encoding import WordEncoder, make_collate
 from phee.seq.model import TokenTagger
@@ -147,10 +147,7 @@ def run(config, seed, run_dir):
         es_items = _build_items(es_dev, encoder_helper, level, with_labels=False)
 
         set_seed(seed)  # the new head is initialised with this seed
-        encoder = load_encoder(
-            model_config["name"],
-            **({"attn_implementation": model_config["attn_implementation"]} if model_config.get("attn_implementation") else {}),
-        )
+        encoder = load_encoder(model_config["name"], **model_kwargs(model_config))
         model = TokenTagger(
             encoder,
             level["tags"],

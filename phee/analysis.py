@@ -94,6 +94,10 @@ def aggregate(results_dir, split="test"):
         row["inference_peak_gpu_gb"], _ = _mean_std(
             [entry.get("inference", {}).get("peak_gpu_memory_gb") for _, entry in entries]
         )
+        # LLM with vLLM: no measurable peak (memory reserved up front), weight size instead
+        row["inference_model_weights_gb"], _ = _mean_std(
+            [entry.get("inference", {}).get("model_weights_gb") for _, entry in entries]
+        )
         row["invalid_json_rate"], _ = _mean_std(
             [entry.get("inference", {}).get("invalid_json_rate") for _, entry in entries]
         )
@@ -171,6 +175,9 @@ def markdown_main(rows):
     )
     lines = []
     for row in rows:
+        inference_gpu = _fmt(row["inference_peak_gpu_gb"], None, scale=1)
+        if row["inference_peak_gpu_gb"] is None and row.get("inference_model_weights_gb") is not None:
+            inference_gpu = f"{row['inference_model_weights_gb']:.1f} (weights)"
         lines.append(
             f"| {row['experiment']} | {row['variant']} | {row['seeds']} | "
             f"{_fmt(row['trigger_classification_f1'], row['trigger_classification_f1_std'])} | "
@@ -179,9 +186,13 @@ def markdown_main(rows):
             f"{_fmt(row['overall_classification_f1'], row['overall_classification_f1_std'])} | "
             f"{_fmt(row['train_minutes'], row['train_minutes_std'], scale=1)} | "
             f"{_fmt(row['inference_ms_per_sentence'], None, scale=1)} | "
-            f"{_fmt(row['train_peak_gpu_gb'], None, scale=1)} / {_fmt(row['inference_peak_gpu_gb'], None, scale=1)} |"
+            f"{_fmt(row['train_peak_gpu_gb'], None, scale=1)} / {inference_gpu} |"
         )
-    return header + "\n".join(lines) + "\n"
+    note = (
+        "\nGPU GB: peak memory allocated by PyTorch. LLM rows with vLLM show the size of the "
+        "model weights, because vLLM reserves a fixed share of the GPU for its KV cache.\n"
+    )
+    return header + "\n".join(lines) + "\n" + note
 
 
 def markdown_subsets(rows):

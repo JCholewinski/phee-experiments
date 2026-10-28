@@ -22,13 +22,32 @@ from phee.llm.prompts import extract_json, messages, to_predictions
 from phee.utils import GpuMemory, Timer, log
 
 
-def _gpu_memory_in_use():
+def _model_weights_gb(name):
+    """Size of the model weights (safetensors files), i.e. the GPU memory taken by the
+    weights in bf16. vLLM reserves `gpu_memory_utilization` of the GPU up front (the rest
+    goes to its KV cache), so its real peak usage cannot be measured like for the other
+    methods; the weight size is reported instead."""
+    try:
+        from pathlib import Path
+
+        path = Path(name)
+        if not path.is_dir():
+            from huggingface_hub import snapshot_download
+
+            path = Path(snapshot_download(name, allow_patterns=["*.safetensors", "*.json"]))
+        size = sum(file.stat().st_size for file in path.glob("*.safetensors"))
+        return size / 1024 ** 3 if size else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _reserved_gpu_memory_gb(model_config):
     try:
         import torch
 
         if torch.cuda.is_available():
-            free, total = torch.cuda.mem_get_info()
-            return (total - free) / 1024 ** 3
+            total = torch.cuda.get_device_properties(0).total_memory
+            return model_config.get("gpu_memory_utilization", 0.85) * total / 1024 ** 3
     except Exception:  # noqa: BLE001
         pass
     return None
@@ -68,7 +87,14 @@ class VllmBackend:
         self.sampling = SamplingParams(temperature=0.0, max_tokens=max_new_tokens)
 
     def generate(self, prompts):
-        outputs = self.llm.generate(prompts, self.sampling)
+        # The chat template already contains the special tokens (e.g. Llama's
+        # <|begin_of_text|>); a text prompt would get a second BOS from vLLM's tokenizer
+        # call, so the prompts are tokenized here without special tokens.
+        token_prompts = [
+            {"prompt_token_ids": self.tokenizer(prompt, add_special_tokens=False)["input_ids"]}
+            for prompt in prompts
+        ]
+        outputs = self.llm.generate(token_prompts, self.sampling)
         return [output.outputs[0].text for output in outputs], [len(output.outputs[0].token_ids) for output in outputs]
 
 
@@ -122,6 +148,8 @@ def run(config, seed, run_dir):
     with Timer() as load_timer:
         backend_class = VllmBackend if model_config.get("backend", "vllm") == "vllm" else HfBackend
         backend = backend_class(model_config, max_new_tokens)
+    weights_gb = _model_weights_gb(model_config["name"])
+    reserved_gb = _reserved_gpu_memory_gb(model_config)
     retriever = BM25([sample["context"] for sample in data["train"]])
 
     for shots in shots_list:
@@ -150,8 +178,10 @@ def run(config, seed, run_dir):
             inference = {
                 "seconds": timer.seconds,
                 # vLLM runs the model in its own process and pre-allocates
-                # gpu_memory_utilization x total memory; report the memory in use instead.
-                "peak_gpu_memory_gb": memory.peak_gb if isinstance(backend, HfBackend) else _gpu_memory_in_use(),
+                # gpu_memory_utilization x total memory: no comparable peak (see _model_weights_gb)
+                "peak_gpu_memory_gb": memory.peak_gb if isinstance(backend, HfBackend) else None,
+                "model_weights_gb": weights_gb,
+                "reserved_gpu_memory_gb": None if isinstance(backend, HfBackend) else reserved_gb,
                 "invalid_json": invalid,
                 "invalid_json_rate": invalid / max(1, len(samples)),
                 "mean_prompt_tokens": sum(prompt_tokens) / max(1, len(prompt_tokens)),

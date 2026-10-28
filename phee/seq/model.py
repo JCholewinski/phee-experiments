@@ -1,4 +1,4 @@
-"""Token tagger: any HF encoder (BioBERT, Bio-ModernBERT, ...) + a prediction head.
+"""Token tagger: any HF encoder (BioBERT, BioClinical ModernBERT, ...) + a prediction head.
 
 The model works on WORDS (the PHEE tokens): every word is represented by its first
 sub-word. Heads:

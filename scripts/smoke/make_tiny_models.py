@@ -2,7 +2,7 @@
 tests without internet access (one per architecture used in the experiments):
 
   bert       BERT + WordPiece                  (BioBERT path)
-  modernbert ModernBERT + byte-level BPE        (Bio-ModernBERT path)
+  modernbert ModernBERT + byte-level BPE        (BioClinical ModernBERT path)
   t5         T5 + SentencePiece unigram         (SciFive path)
   t5gemma    T5Gemma + SentencePiece BPE (Gemma ids: pad 0, eos 1, bos 2, unk 3)
   llm        tiny Qwen2 causal LM + chat template (LLM HF backend)

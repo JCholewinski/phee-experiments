@@ -20,6 +20,7 @@ from phee.io import load_config, read_yaml  # noqa: E402
 
 TINY = {
     "dmis-lab/biobert-base-cased-v1.1": "bert",
+    "thomas-sounack/BioClinical-ModernBERT-base": "modernbert",
     "thomas-sounack/Bio-ModernBERT-base": "modernbert",
     "razent/SciFive-base-PMC": "t5",
     "google/t5gemma-b-b-ul2": "t5gemma",

@@ -33,7 +33,7 @@ from phee.eqa.qa import accepts_token_type_ids, make_collate, predict_answers, t
 from phee.eqa.templates import main_question, sub_question, trigger_question
 from phee.evaluation import score_families
 from phee.experiment import RunRecorder, early_stopping_dev, load_splits
-from phee.hf import count_parameters, load_tokenizer
+from phee.hf import count_parameters, load_tokenizer, model_kwargs
 from phee.io import deep_update
 from phee.schema import MAIN_LABELS, SUB_LABELS_BY_PARENT
 from phee.training import train_model, training_settings
@@ -307,7 +307,7 @@ def run(config, seed, run_dir):
     es_dev = early_stopping_dev(config, data)
     tokenizer = load_tokenizer(model_config["name"])
     pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
-    load_kwargs = {"attn_implementation": model_config["attn_implementation"]} if model_config.get("attn_implementation") else {}
+    load_kwargs = model_kwargs(model_config)
     need_train_predictions = train_inputs == "predicted"
     splits = ["dev", "test"] + (["train"] if need_train_predictions else [])
     inference = {split: {"seconds": 0.0, "peak_gpu_memory_gb": None} for split in ("dev", "test")}

@@ -59,9 +59,11 @@ cd /workspace
 git clone https://github.com/JCholewinski/phee-experiments.git
 cd phee-experiments
 git checkout experiments-v2
-pip install -r requirements.txt
-export PYTHONPATH=$PWD
+bash scripts/vast/setup.sh        # instaluje zależności i uruchamia testy; z --llm także venv z vLLM
+export HF_HOME=/workspace/hf PYTHONPATH=$PWD
 ```
+
+(Ręcznie: `pip install -r requirements.txt`, `export PYTHONPATH=$PWD`.)
 
 Dane są już w repozytorium w postaci po konwersji. Gdybyś chciał je wygenerować od nowa:
 `python scripts/prepare_data.py`.
@@ -73,7 +75,7 @@ stronie modelu w Hugging Face (raz, na koncie). Potem zaloguj się tokenem na ma
 hf auth login          # starsze wersje huggingface_hub: huggingface-cli login
 ```
 
-Pozostałe modele (BioBERT, Bio-ModernBERT, SciFive) są dostępne bez logowania.
+Pozostałe modele (BioBERT, BioClinical ModernBERT, SciFive) są dostępne bez logowania.
 
 ### 3. Testy (opcjonalnie, CPU wystarczy)
 
@@ -97,18 +99,15 @@ python scripts/smoke/run_smoke.py
 ### 4. Szybki test na prawdziwych modelach (GPU)
 
 Uruchom po jednym przebiegu każdej metody na 200 zdaniach i 1 epoce. Pozwala sprawdzić,
-czy modele się pobierają i ile trwa epoka (żeby zdecydować o rozmiarze Base / Large).
+czy modele się pobierają i działają na GPU, oraz ile potrwa epoka na pełnych danych:
 
 ```bash
-for c in seq/authors_baseline seq/own_crf eqa/authors_baseline eqa/own_current_predicted \
-         gqa/authors_baseline gqa/own_current_predicted; do
-  python scripts/run_experiment.py --config configs/$c.yaml --seed 1 --output_dir results_quick \
-    --set data.limit=200 --set training.max_epochs=1 --force
-done
+bash scripts/vast/quick_check.sh
 ```
 
-Czas epoki jest w logu (`... epoch 1: train loss ..., dev f1 ...`) i w
-`results_quick/<eksperyment>/seed1/training.json` (`train_seconds`).
+Na końcu skrypt wypisuje dla każdego etapu czas jednej epoki przeliczony na pełne dane
+(trening i ocena na dev) oraz szczytową pamięć GPU. Wyniki trafiają do `results_quick/`
+(oddzielnie od właściwych wyników, wyniki jakości są tu bez znaczenia).
 
 ### 5. Pełne eksperymenty
 
@@ -136,8 +135,8 @@ vLLM instaluje własne wersje torch i transformers, dlatego potrzebny jest osobn
 ```bash
 python -m venv /workspace/venv-llm
 /workspace/venv-llm/bin/pip install -r requirements-llm.txt
-# Llama 3.1 jest modelem z ograniczonym dostępem: zaakceptuj licencję na HF, potem:
-/workspace/venv-llm/bin/huggingface-cli login
+# Llama 3.1 jest modelem z ograniczonym dostępem: zaakceptuj licencję na HF. Token z
+# `hf auth login` (krok 2) jest wspólny dla obu środowisk, jeśli HF_HOME jest ten sam.
 PYTHONPATH=$PWD /workspace/venv-llm/bin/python scripts/run_matrix.py --groups llm
 ```
 
@@ -193,12 +192,27 @@ Wspólna procedura treningu (`phee/training.py`): AdamW, rozgrzewka 10%, liniowy
 LR, bf16, do 20 epok, **early stopping po 2 ocenach bez poprawy** wyniku F1 na dev
 (każdy etap ma własną miarę na dev), przywrócenie najlepszego checkpointu, 3 seedy.
 
+Modele:
+
+| Metoda | Baseline (jak autorzy) | Własne warianty |
+|---|---|---|
+| Sequence labeling | `dmis-lab/biobert-base-cased-v1.1` | `thomas-sounack/BioClinical-ModernBERT-base` |
+| Extractive QA | `dmis-lab/biobert-base-cased-v1.1` | `thomas-sounack/BioClinical-ModernBERT-base` |
+| Generative QA | `razent/SciFive-base-PMC` | `google/t5gemma-b-b-ul2` |
+| LLM | – | `Qwen/Qwen3-8B`, `meta-llama/Llama-3.1-8B-Instruct` |
+
+BioClinical ModernBERT zamiast Bio-ModernBERT: autorzy obu modeli (Sounack i in. 2025)
+piszą, że wariant tylko biomedyczny (Bio-ModernBERT) konsekwentnie wypadał gorzej w ich
+ewaluacjach, a BioClinical ModernBERT był w fazie 1 trenowany także na PubMed i PMC.
+Zmiana modelu to jedna linijka (`model.name`) w `configs/seq/own_base.yaml` i
+`configs/eqa/own_base.yaml`.
+
 ### Sequence labeling (`configs/seq/`)
 
 | Config | Opis |
 |---|---|
 | `authors_baseline` | jak u autorów: jeden model, etykiety złożone (argument + subargument), schemat IO, zdanie kopiowane osobno dla każdego zdarzenia, BioBERT, głowica liniowa |
-| `own_linear` / `own_mlp` / `own_crf` | Twoja konstrukcja: dwa modele (poziom główny i subargumenty), BIO, zdanie z kilkoma zdarzeniami użyte raz, Bio-ModernBERT; głowice: liniowa, MLP (256, GELU), CRF z **uczonymi** przejściami (NLL CRF, ograniczenia BIO) |
+| `own_linear` / `own_mlp` / `own_crf` | Twoja konstrukcja: dwa modele (poziom główny i subargumenty), BIO, zdanie z kilkoma zdarzeniami użyte raz, BioClinical ModernBERT; głowice: liniowa, MLP (256, GELU), CRF z **uczonymi** przejściami (NLL CRF, ograniczenia BIO) |
 
 Dekodowanie (`argmax`, `viterbi` z ograniczeniami BIO) jest liczone na tym samym
 wytrenowanym modelu, więc każdy przebieg daje oba warianty. Spany nakładające się na span

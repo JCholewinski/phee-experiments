@@ -1,4 +1,4 @@
-# Gated model: accept the license on Hugging Face and run `huggingface-cli login` first.
+# Gated model: accept the license on Hugging Face and run `hf auth login` first.
 inherit: base.yaml
 model:
   name: meta-llama/Llama-3.1-8B-Instruct

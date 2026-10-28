@@ -1,11 +1,12 @@
 # Own extractive QA pipeline: event type classifier -> trigger QA -> main-argument QA
-# -> sub-argument QA (the existing implementation), Bio-ModernBERT.
+# -> sub-argument QA (the existing implementation), BioClinical ModernBERT.
 inherit: ../base.yaml
 method: eqa
 templates: current
 train_inputs: predicted
 model:
-  name: thomas-sounack/Bio-ModernBERT-base
+  name: thomas-sounack/BioClinical-ModernBERT-base   # recommended by its authors over Bio-ModernBERT
+  compile: false   # ModernBERT's built-in torch.compile (needs a C compiler on the machine)
   max_length: 384
   stride: 128
 event_type: {threshold: 0.5, force_one: true, max_length: 256}

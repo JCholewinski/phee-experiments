@@ -73,6 +73,8 @@ def main():
     if (run_dir / "DONE").exists() and not args.force:
         log(f"skip {run_dir} (already done)")
         return
+    for marker in ("DONE", "FAILED"):  # markers of an earlier attempt
+        (run_dir / marker).unlink(missing_ok=True)
     log(f"run {config['name']} seed {args.seed} -> {run_dir}")
 
     import importlib

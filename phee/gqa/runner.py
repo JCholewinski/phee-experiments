@@ -37,7 +37,7 @@ from phee.gqa.format import (
     stage1_segments,
     stage2_segments,
 )
-from phee.hf import count_parameters, load_tokenizer
+from phee.hf import count_parameters, load_tokenizer, model_kwargs
 from phee.io import deep_update
 from phee.normalize import normalize_text
 from phee.schema import SUB_LABELS_BY_PARENT
@@ -282,7 +282,7 @@ def run(config, seed, run_dir):
     tokenizer = load_tokenizer(model_config["name"])
     pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
     segment_tokenizer = SegmentTokenizer(tokenizer)
-    load_kwargs = {"attn_implementation": model_config["attn_implementation"]} if model_config.get("attn_implementation") else {}
+    load_kwargs = model_kwargs(model_config)
     stage1_grammar = "stage1_authors" if target_format == "authors" else "stage1_own"
     symbols1 = {
         "event": list(EVENT_MARKERS[target_format].values()),

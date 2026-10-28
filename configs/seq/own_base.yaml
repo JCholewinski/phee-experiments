@@ -4,7 +4,8 @@ inherit: ../base.yaml
 method: seq
 scheme: two_level
 model:
-  name: thomas-sounack/Bio-ModernBERT-base
+  name: thomas-sounack/BioClinical-ModernBERT-base   # recommended by its authors over Bio-ModernBERT
+  compile: false   # ModernBERT's built-in torch.compile (needs a C compiler on the machine)
   dropout: 0.1
   max_length: 512
   mlp_hidden_size: 256
