@@ -1,0 +1,6 @@
+# LLM zero-shot / few-shot part. Install in a SEPARATE virtual environment:
+# vLLM pins its own torch and transformers versions.
+#   python -m venv /workspace/venv-llm && /workspace/venv-llm/bin/pip install -r requirements-llm.txt
+vllm
+pyyaml
+numpy

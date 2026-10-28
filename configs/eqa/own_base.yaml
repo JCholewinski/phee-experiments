@@ -1,0 +1,18 @@
+# Own extractive QA pipeline: event type classifier -> trigger QA -> main-argument QA
+# -> sub-argument QA (the existing implementation), Bio-ModernBERT.
+inherit: ../base.yaml
+method: eqa
+templates: current
+train_inputs: predicted
+model:
+  name: thomas-sounack/Bio-ModernBERT-base
+  max_length: 384
+  stride: 128
+event_type: {threshold: 0.5, force_one: true, max_length: 256}
+answers:
+  trigger: {max_answer_length: 8, max_spans: 1, use_null: false, null_threshold: 0.0}
+  main: {max_answer_length: 60, max_spans: 3, use_null: true, null_threshold: 0.0}
+  sub: {max_answer_length: 50, max_spans: 3, use_null: true, null_threshold: 0.0}
+training:
+  learning_rate: 5.0e-5
+  batch_size: 16

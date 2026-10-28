@@ -1,0 +1,3 @@
+inherit: own_base.yaml
+model:
+  head: mlp

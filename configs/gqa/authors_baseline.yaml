@@ -1,0 +1,24 @@
+# Generative QA as in the PHEE repository: SciFive-base-PMC, authors' target format and
+# stage-2 template ("<Arg.Name> in <event type>"), stage 2 trained on gold main arguments,
+# lr 5e-4 / 5e-5, effective batch 16, up to 20 epochs with patience 2, beam 3, free decoding.
+inherit: ../base.yaml
+method: gqa
+target_format: authors
+templates: authors
+train_inputs: gold
+decodings: [free]
+model:
+  name: razent/SciFive-base-PMC
+generation:
+  num_beams: 3
+  max_source_length: 512
+  max_target_length: 256
+  stage1_max_new_tokens: 256
+  stage2_max_new_tokens: 64
+training:
+  batch_size: 8
+  grad_accum: 2
+  eval_batch_size: 32
+stage_training:
+  stage1: {learning_rate: 5.0e-4}
+  stage2: {learning_rate: 5.0e-5}

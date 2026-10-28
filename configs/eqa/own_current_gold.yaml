@@ -1,0 +1,4 @@
+# Error propagation in training: later stages trained on gold inputs instead.
+inherit: own_base.yaml
+templates: current
+train_inputs: gold

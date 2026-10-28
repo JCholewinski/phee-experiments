@@ -1,15 +1,14 @@
-outputs/seq/final/
-outputs/seq/checkpoint-*/.venv/
-outputs/seq/
-.venv/
+# experiment outputs
+results/
+.smoke/
+outputs/
 
-# Trained models and checkpoints
-outputs/models/
-outputs/seq/
-outputs/seq_subarguments/
-outputs/**/checkpoint-*/
-outputs/**/final/
+# environments
+.venv/
+venv/
+venv-llm/
 
 # Python cache
 __pycache__/
 *.pyc
+.env

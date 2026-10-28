@@ -1,0 +1,15 @@
+# Sequence labeling as in the PHEE paper (approximation, see README):
+# one model, main argument + sub-argument flattened into combined IO tags,
+# multi-event sentences duplicated per event, BioBERT v1.1, linear head.
+inherit: ../base.yaml
+method: seq
+scheme: authors_flat
+model:
+  name: dmis-lab/biobert-base-cased-v1.1
+  head: linear
+  dropout: 0.1
+  max_length: 512
+training:
+  learning_rate: 5.0e-5
+  batch_size: 32
+decodings: [argmax]             # IO tags: no BIO constraints to apply

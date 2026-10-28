@@ -1,0 +1,5 @@
+# Base variant = existing implementation: current templates, later stages trained on
+# the previous stage's predictions.
+inherit: own_base.yaml
+templates: current
+train_inputs: predicted

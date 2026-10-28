@@ -1,0 +1,34 @@
+# Experiment groups for scripts/run_matrix.py (each config x each seed).
+groups:
+  baselines:                    # reproductions of the PHEE paper settings
+    seeds: [1, 2, 3]
+    configs:
+      - configs/seq/authors_baseline.yaml
+      - configs/eqa/authors_baseline.yaml
+      - configs/gqa/authors_baseline.yaml
+  seq:                          # heads x decodings (decodings evaluated inside each run)
+    seeds: [1, 2, 3]
+    configs:
+      - configs/seq/own_linear.yaml
+      - configs/seq/own_mlp.yaml
+      - configs/seq/own_crf.yaml
+  eqa:                          # one factor at a time from the base variant
+    seeds: [1, 2, 3]
+    configs:
+      - configs/eqa/own_current_predicted.yaml
+      - configs/eqa/own_current_gold.yaml
+      - configs/eqa/own_authors_predicted.yaml
+      - configs/eqa/own_definitions_predicted.yaml
+  gqa:                          # one factor at a time; free vs constrained inside each run
+    seeds: [1, 2, 3]
+    configs:
+      - configs/gqa/own_current_predicted.yaml
+      - configs/gqa/own_current_gold.yaml
+      - configs/gqa/own_authors_predicted.yaml
+      - configs/gqa/own_definitions_predicted.yaml
+  llm:                          # greedy decoding: deterministic, one run
+    seeds: [1]
+    fixed_seeds: true
+    configs:
+      - configs/llm/qwen3_8b.yaml
+      - configs/llm/llama31_8b.yaml

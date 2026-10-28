@@ -1,5 +1,7 @@
+.git
+results/
+.smoke/
+legacy/
 __pycache__
 *.pyc
 .env
-.git
-outputs/

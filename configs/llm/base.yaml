@@ -1,0 +1,12 @@
+# Zero-shot and few-shot extraction with a local open-weight LLM (no fine-tuning).
+inherit: ../base.yaml
+method: llm
+shots: [0, 5]                   # 5 demonstrations selected from train with BM25
+max_new_tokens: 1024
+splits: [dev, test]
+model:
+  backend: vllm
+  dtype: bfloat16
+  max_model_len: 8192
+  gpu_memory_utilization: 0.85
+  chat_template_kwargs: {}

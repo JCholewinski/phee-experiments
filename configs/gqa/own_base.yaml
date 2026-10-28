@@ -1,0 +1,22 @@
+# Own generative QA: existing target format and stage-2 questions, T5Gemma (UL2, base).
+inherit: ../base.yaml
+method: gqa
+target_format: own
+templates: current
+train_inputs: predicted
+decodings: [free, constrained]  # constrained decoding is applied to the same trained models
+model:
+  name: google/t5gemma-b-b-ul2
+  attn_implementation: eager    # Gemma 2 attention uses logit soft-capping
+generation:
+  num_beams: 3
+  max_source_length: 512
+  max_target_length: 256
+  stage1_max_new_tokens: 256
+  stage2_max_new_tokens: 64
+  max_span_words: 80
+training:
+  learning_rate: 1.0e-4
+  batch_size: 8
+  grad_accum: 2
+  eval_batch_size: 32

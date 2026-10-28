@@ -1,21 +1,9 @@
-# baza z GPU (CUDA)
-FROM pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
+# GPU image for the training / evaluation environment (the LLM part uses requirements-llm.txt).
+FROM pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime
 
-# ustaw katalog roboczy
 WORKDIR /workspace
-
-# kopiuj requirements
 COPY requirements.txt .
-
-# instalacja paczek
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir huggingface_hub[cli]
-
-# kopiuj cały projekt
 COPY . .
-
-# ustaw PYTHONPATH
 ENV PYTHONPATH=/workspace
-
-# domyślna komenda (możesz zmienić)
-CMD ["python", "scripts/run_all.py"]
+CMD ["python", "scripts/run_matrix.py", "--groups", "baselines", "seq", "eqa", "gqa"]

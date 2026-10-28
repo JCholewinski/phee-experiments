@@ -1,0 +1,4 @@
+inherit: base.yaml
+model:
+  name: Qwen/Qwen3-8B
+  chat_template_kwargs: {enable_thinking: false}   # answer directly, no reasoning trace

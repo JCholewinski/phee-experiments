@@ -1,0 +1,5 @@
+inherit: own_base.yaml
+model:
+  head: crf
+training:
+  crf_learning_rate: 1.0e-3     # transition scores start at 0 and need a larger step

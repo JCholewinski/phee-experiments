@@ -1,0 +1,17 @@
+# Own sequence labeling: two models (main level, sub-arguments), BIO tags,
+# multi-event sentences used once with the spans of all events.
+inherit: ../base.yaml
+method: seq
+scheme: two_level
+model:
+  name: thomas-sounack/Bio-ModernBERT-base
+  dropout: 0.1
+  max_length: 512
+  mlp_hidden_size: 256
+  mlp_dropout: 0.1
+  mlp_activation: gelu
+  crf_constrained: true
+training:
+  learning_rate: 5.0e-5
+  batch_size: 16
+decodings: [argmax, viterbi]    # every decoding is evaluated on the same trained model

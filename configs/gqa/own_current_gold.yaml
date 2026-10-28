@@ -1,0 +1,3 @@
+inherit: own_base.yaml
+templates: current
+train_inputs: gold

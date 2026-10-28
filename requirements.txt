@@ -1,9 +1,12 @@
-transformers
-scikit-learn
-datasets
-#torch
-accelerate
-seqeval
+# Training / evaluation environment (sequence labeling, extractive QA, generative QA).
+# On vast.ai use a PyTorch image (e.g. pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel);
+# torch comes with the image. Tested locally with torch 2.8.0 (CPU) and the versions below.
+transformers==4.57.6
+tokenizers>=0.22,<0.23
+safetensors
+sentencepiece          # T5 / SciFive and Gemma tokenizers
+protobuf
 pyyaml
-huggingface_hub[cli]
-pytorch-crf
+numpy
+matplotlib             # quality vs cost plot
+huggingface_hub

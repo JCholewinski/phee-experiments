@@ -1,0 +1,4 @@
+# Question templates: the authors' templates.
+inherit: own_base.yaml
+templates: authors
+train_inputs: predicted

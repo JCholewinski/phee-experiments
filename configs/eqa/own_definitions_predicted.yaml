@@ -1,0 +1,4 @@
+# Question templates: current questions extended with the label definition.
+inherit: own_base.yaml
+templates: definitions
+train_inputs: predicted

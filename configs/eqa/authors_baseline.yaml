@@ -1,0 +1,22 @@
+# Extractive QA as in the PHEE paper (approximation, see README): BioBERT v1.1,
+# authors' question templates, later stages trained on gold inputs (EEQA),
+# several answers per question when they score above the no-answer score.
+# Triggers: our QA formulation (the authors used EEQA token classification).
+inherit: ../base.yaml
+method: eqa
+templates: authors
+train_inputs: gold
+model:
+  name: dmis-lab/biobert-base-cased-v1.1
+  max_length: 384
+  stride: 128
+event_type: {threshold: 0.5, force_one: true, max_length: 256}
+answers:
+  trigger: {max_answer_length: 8, max_spans: 1, use_null: false, null_threshold: 0.0}
+  main: {max_answer_length: 30, max_spans: 10, use_null: true, null_threshold: 0.0}
+  sub: {max_answer_length: 30, max_spans: 10, use_null: true, null_threshold: 0.0}
+training:
+  learning_rate: 5.0e-5
+  batch_size: 16
+stage_training:
+  trigger: {learning_rate: 1.0e-5, batch_size: 32}
