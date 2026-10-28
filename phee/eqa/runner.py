@@ -388,6 +388,10 @@ def run(config, seed, run_dir):
     examples = main_training_examples(
         data["train"], templates, triggers["train"] if need_train_predictions else None
     )
+    main_fallback = not examples
+    if main_fallback:
+        log("eqa: WARNING no main-argument training examples from predictions, using gold triggers")
+        examples = main_training_examples(data["train"], templates)
     train_items = train_features(examples, tokenizer, max_length, stride, use_types)
     dev_gold_triggers = gold_triggers(es_dev)
     model, report = train_model(
@@ -401,6 +405,7 @@ def run(config, seed, run_dir):
         settings, seed, name="eqa_main",
     )
     report["parameters"] = count_parameters(model)
+    report["fallback_to_gold_inputs"] = main_fallback
     recorder.add_stage(report)
     mains = {}
     for split in splits:
@@ -419,6 +424,10 @@ def run(config, seed, run_dir):
     examples = sub_training_examples(
         data["train"], templates, mains["train"] if need_train_predictions else None
     )
+    sub_fallback = not examples
+    if sub_fallback:
+        log("eqa: WARNING no sub-argument training examples from predictions, using gold main arguments")
+        examples = sub_training_examples(data["train"], templates)
     train_items = train_features(examples, tokenizer, max_length, stride, use_types)
     dev_gold_mains = gold_mains(es_dev)
     model, report = train_model(
@@ -432,6 +441,7 @@ def run(config, seed, run_dir):
         settings, seed, name="eqa_sub",
     )
     report["parameters"] = count_parameters(model)
+    report["fallback_to_gold_inputs"] = sub_fallback
     recorder.add_stage(report)
     subs = {}
     for split in ("dev", "test"):

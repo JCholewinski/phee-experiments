@@ -34,6 +34,14 @@ RUNNERS = {
 def apply_override(config, assignment):
     key, _, raw = assignment.partition("=")
     value = yaml.safe_load(raw)
+    if isinstance(value, str):
+        # YAML reads "1e-3" (no dot) as a string
+        for cast in (int, float):
+            try:
+                value = cast(value)
+                break
+            except ValueError:
+                continue
     node = config
     parts = key.split(".")
     for part in parts[:-1]:

@@ -30,9 +30,21 @@ DEFAULT_TRAINING = {
 }
 
 
+_FLOAT_KEYS = ("learning_rate", "head_learning_rate", "crf_learning_rate", "warmup_ratio",
+               "weight_decay", "max_grad_norm")
+_INT_KEYS = ("batch_size", "eval_batch_size", "grad_accum", "max_epochs", "patience", "log_every")
+
+
 def training_settings(config):
     settings = dict(DEFAULT_TRAINING)
     settings.update(config or {})
+    # YAML reads e.g. "1e-3" (without a dot) as a string
+    for key in _FLOAT_KEYS:
+        if settings.get(key) is not None:
+            settings[key] = float(settings[key])
+    for key in _INT_KEYS:
+        if settings.get(key) is not None:
+            settings[key] = int(settings[key])
     return settings
 
 

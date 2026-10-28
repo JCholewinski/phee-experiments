@@ -83,7 +83,7 @@ class HfBackend:
         self.tokenizer.padding_side = "left"
         self.model = AutoModelForCausalLM.from_pretrained(
             model_config["name"],
-            torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+            dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
         )
         self.model.to("cuda" if torch.cuda.is_available() else "cpu").eval()
         self.max_new_tokens = max_new_tokens
@@ -97,8 +97,11 @@ class HfBackend:
             batch = self.tokenizer(prompts[start:start + self.batch_size], return_tensors="pt",
                                    padding=True, add_special_tokens=False).to(self.model.device)
             with torch.no_grad():
-                generated = self.model.generate(**batch, max_new_tokens=self.max_new_tokens, do_sample=False,
-                                                pad_token_id=self.tokenizer.pad_token_id)
+                generated = self.model.generate(
+                    input_ids=batch["input_ids"], attention_mask=batch["attention_mask"],
+                    max_new_tokens=self.max_new_tokens, do_sample=False,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                )
             new_tokens = generated[:, batch["input_ids"].shape[1]:]
             for row in new_tokens:
                 ids = [t for t in row.tolist() if t != self.tokenizer.pad_token_id]

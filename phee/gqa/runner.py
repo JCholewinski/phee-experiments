@@ -356,6 +356,13 @@ def run(config, seed, run_dir):
         data["train"], tokenizer, segment_tokenizer, templates, generation,
         train_mains if need_train_predictions else None,
     )
+    fallback = False
+    if not train_items:
+        # stage 1 predicted no main argument on the training set (e.g. a broken model):
+        # train stage 2 on gold inputs instead of failing, and record it
+        log("gqa: WARNING no stage-2 training examples from predictions, using gold main arguments")
+        train_items = _stage2_training_items(data["train"], tokenizer, segment_tokenizer, templates, generation)
+        fallback = True
     dev_gold_mains = _gold_mains(es_dev)
 
     def evaluate_stage2(current_model):
@@ -365,6 +372,7 @@ def run(config, seed, run_dir):
     model, report = train_model(model, train_items, _collate(pad_id), evaluate_stage2, settings, seed,
                                 name="gqa_stage2")
     report["parameters"] = count_parameters(model)
+    report["fallback_to_gold_inputs"] = fallback
     recorder.add_stage(report)
 
     for decoding in decodings:

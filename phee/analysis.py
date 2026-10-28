@@ -21,6 +21,16 @@ MAIN_METRICS = [
     "arguments_classification_f1",
     "overall_classification_f1",
 ]
+DEPENDENCY_KEYS = [
+    "main_trigger_found_arg_found",
+    "main_trigger_found_arg_missed",
+    "main_trigger_missed_arg_found",
+    "main_trigger_missed_arg_missed",
+    "sub_parent_found_arg_found",
+    "sub_parent_found_arg_missed",
+    "sub_parent_missed_arg_found",
+    "sub_parent_missed_arg_missed",
+]
 SUBSET_METRICS = [
     "single_event_main_classification_f1",
     "multi_event_main_classification_f1",
@@ -113,8 +123,10 @@ def aggregate(results_dir, split="test"):
             })
         if dependency:
             dep_row = {"experiment": experiment, "variant": variant}
-            for key, values in sorted(dependency.items()):
-                dep_row[key] = statistics.mean(values)
+            for key in DEPENDENCY_KEYS:
+                values = dependency.get(key, [])
+                # a key missing in a run means 0 cases in that run
+                dep_row[key] = sum(values) / len(entries) if values else 0.0
             found_missed = dep_row.get("main_trigger_found_arg_missed", 0)
             missed_missed = dep_row.get("main_trigger_missed_arg_missed", 0)
             total_missed = found_missed + missed_missed
@@ -189,23 +201,26 @@ def markdown_subsets(rows):
 
 
 def markdown_labels(label_rows):
-    by_label = defaultdict(dict)
-    columns = []
+    """Rows: (experiment, variant); columns: labels from the rarest (test support)."""
     supports = {}
+    values = defaultdict(dict)
+    order_rows = []
     for row in label_rows:
-        column = f"{row['experiment']} [{row['variant']}]"
-        if column not in columns:
-            columns.append(column)
-        by_label[row["label"]][column] = _fmt(row["f1"], row["f1_std"])
+        key = (row["experiment"], row["variant"])
+        if key not in values:
+            order_rows.append(key)
+        values[key][row["label"]] = row["f1"]
         supports[row["label"]] = row["support"]
-    order = sorted(by_label, key=lambda label: supports.get(label, 0))
-    header = "| Label | Test support | " + " | ".join(columns) + " |\n"
-    header += "|---|---|" + "---|" * len(columns) + "\n"
+    labels = sorted(supports, key=lambda label: supports[label])
+    header = "| Experiment | Variant | " + " | ".join(f"{label} ({supports[label]})" for label in labels) + " |\n"
+    header += "|---|---|" + "---|" * len(labels) + "\n"
     lines = [
-        f"| {label} | {supports.get(label, '')} | " + " | ".join(by_label[label].get(c, "–") for c in columns) + " |"
-        for label in order
+        f"| {experiment} | {variant} | "
+        + " | ".join(_fmt(values[(experiment, variant)].get(label)) for label in labels) + " |"
+        for experiment, variant in order_rows
     ]
-    return header + "\n".join(lines) + "\n"
+    note = "\nEM-F1 [%], mean over seeds (std in labels_*.csv); in brackets: number of test items.\n"
+    return header + "\n".join(lines) + "\n" + note
 
 
 def plot_quality_cost(rows, path):
