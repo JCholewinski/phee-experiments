@@ -1,8 +1,9 @@
 transformers
 scikit-learn
 datasets
-torch
+#torch
 accelerate
 seqeval
 pyyaml
 huggingface_hub[cli]
+pytorch-crf

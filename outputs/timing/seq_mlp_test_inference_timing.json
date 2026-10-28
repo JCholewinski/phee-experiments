@@ -1,0 +1,13 @@
+{
+  "method": "sequence_labeling_mlp",
+  "head_type": "mlp",
+  "split": "test",
+  "num_samples": 725,
+  "total_inference_time_seconds": 27.155399347975617,
+  "avg_inference_time_seconds": 0.037455723238587056,
+  "median_inference_time_seconds": 0.03730328500387259,
+  "min_inference_time_seconds": 0.03596044299774803,
+  "max_inference_time_seconds": 0.146735311995144,
+  "model_path": "outputs/seq/mlp/final",
+  "device": "cuda"
+}

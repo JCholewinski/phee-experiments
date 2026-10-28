@@ -1,0 +1,13 @@
+{
+  "method": "sequence_labeling_crf",
+  "head_type": "crf",
+  "split": "val",
+  "num_samples": 724,
+  "total_inference_time_seconds": 27.502334151038667,
+  "avg_inference_time_seconds": 0.03798664937988766,
+  "median_inference_time_seconds": 0.03779566448065452,
+  "min_inference_time_seconds": 0.032650476990966126,
+  "max_inference_time_seconds": 0.16819041801500134,
+  "model_path": "outputs/seq/crf/final",
+  "device": "cuda"
+}
