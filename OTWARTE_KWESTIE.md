@@ -4,17 +4,19 @@ Stan na 28.10.2026, koniec sesji implementacji (przerwanej z powodu limitu kredy
 
 ## Do decyzji
 
-1. **Model w generative QA.** Zasada: bierzemy to, co działa najlepiej, nie najnowsze.
-   T5Gemma nie ma wyników na PHEE. Flan-T5-large był najlepszym dostrojonym modelem na
-   PHEE w pracy Sun i in. 2024 (EM-F1 argumentów głównych 70.78 wobec 68.85 dla
-   generative QA ze SciFive; inny podział danych i format jednej sekwencji). Koszt:
-   ok. 2× dłuższy trening generative QA. Zmiana: `model.name: google/flan-t5-large`
-   w `configs/gqa/own_base.yaml` (+ ich hiperparametry: lr 3e-4, batch 32, warmup 0.06).
-2. **LLM.** Qwen3-8B zostaje. Llama-3.1-8B jest starsza i słabsza; jeśli ma być
-   najmocniejszy model mieszczący się w 24 GB: np. Qwen3-14B w FP8.
+1. **Extractive QA, kilka triggerów tego samego typu.** Na branchu: najlepsza odpowiedź
+   + kolejne w granicy marginesu wybieranego na dev. Do wyboru:
+   A) jedna odpowiedź na pytanie o trigger (pierwotna konstrukcja) i opis ograniczenia
+      (ok. 13 z 1010 zdarzeń w teście nieosiągalnych),
+   B) pytanie o trigger działa jak pytania o argumenty: wszystkie odpowiedzi powyżej
+      „brak odpowiedzi” (min. 1, maks. 3); w treningu dochodzą pytania o typ zdarzenia,
+      którego w zdaniu nie ma,
+   C) obecna wersja z marginesem.
 
-Rozstrzygnięte: SL i extractive QA na BioClinical ModernBERT (wariant, który według
-autorów działał lepiej niż Bio-ModernBERT).
+Rozstrzygnięte:
+- SL i extractive QA: BioClinical ModernBERT (według autorów lepszy niż Bio-ModernBERT).
+- Generative QA: zostaje T5Gemma (decyzja z 29.10).
+- LLM: zostają Qwen3-8B i Llama-3.1-8B.
 
 ## Niesprawdzone lokalnie (brak GPU i dostępu do Hugging Face w środowisku)
 
