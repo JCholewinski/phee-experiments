@@ -4,7 +4,8 @@
     "events": 1003,
     "multi_event_sentences": 41,
     "sentences": 961,
-    "spans_not_on_token_boundaries": 33
+    "spans_not_on_token_boundaries": 33,
+    "whitespace_tokens_removed": 2
   },
   "test": {
     "dropped_Treatment.Combination": 128,
@@ -12,13 +13,15 @@
     "multi_event_sentences": 40,
     "repaired_offsets": 1,
     "sentences": 968,
-    "spans_not_on_token_boundaries": 15
+    "spans_not_on_token_boundaries": 15,
+    "whitespace_tokens_removed": 2
   },
   "train": {
     "dropped_Treatment.Combination": 376,
     "events": 3004,
     "multi_event_sentences": 100,
     "sentences": 2898,
-    "spans_not_on_token_boundaries": 87
+    "spans_not_on_token_boundaries": 87,
+    "whitespace_tokens_removed": 2
   }
 }

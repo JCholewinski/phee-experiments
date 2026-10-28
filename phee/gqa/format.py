@@ -139,6 +139,9 @@ def _marker_meaning(marker):
 def parse_stage1(text, split_values=False):
     """Generated stage-1 text -> list of events
     {"event_type", "trigger": [str], "args": {label: [str]}}."""
+    # an output cut off by the length limit can end inside a marker ("... [Eff");
+    # without this the fragment would be glued to the previous value
+    text = re.sub(r"\[[^\]]*$", "", text)
     if _is_none(text):
         return []
     events = []

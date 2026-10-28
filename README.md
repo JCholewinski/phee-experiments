@@ -160,6 +160,8 @@ python scripts/tag_ceiling.py            # górne granice schematów SL
 - Tokenizacja (spaCy) pochodzi z oryginalnego wydania PHEE, więc SL działa na tych samych
   tokenach co u autorów. Wszystkie zdania zostały dopasowane bez błędów; 135 z ok.
   34 tys. granic adnotacji wypada w środku tokenu (np. „mofeti” zamiast „mofetil”).
+  Usunięte są tokeny złożone z samych spacji lub znaku nowej linii (6 w całym zbiorze),
+  które rozbijałyby span w SL na dwie części; adnotacje się nie zmieniają.
 - `Combination.Drug` oraz atrybuty zdarzeń (negacja, spekulacja, nasilenie) są pominięte.
 - Adnotacja nieciągła (kilka części) to kilka spanów, jak w ewaluacji autorów.
 
@@ -233,7 +235,11 @@ argumentu głównego. Każdy etap ma własny model i własny early stopping.
 | `own_authors_predicted` | autorów | na predykcjach |
 | `own_definitions_predicted` | obecne + definicja etykiety | na predykcjach |
 
-Pytanie może mieć kilka odpowiedzi (powyżej wyniku „brak odpowiedzi”, maks. 3).
+Pytanie o argument może mieć kilka odpowiedzi (powyżej wyniku „brak odpowiedzi”, maks. 3).
+Pytanie o trigger zwraca najlepszy span i ewentualnie kolejne (maks. 3), jeśli ich wynik
+jest najwyżej o `margin` niższy od najlepszego, czyli są co najmniej e^(−margin) razy tak
+prawdopodobne. `margin` wybierany jest na dev z siatki {tylko najlepszy, 0.5, 1, 2, 3}
+(miara: F1 triggerów), więc w zdaniu można znaleźć kilka zdarzeń tego samego typu.
 
 ### Generative QA (`configs/gqa/`)
 
@@ -250,6 +256,9 @@ subargumenty. Dekodowanie `free` i `constrained` jest liczone na tych samych mod
 
 Dekodowanie ograniczone: każdy generowany fragment musi być fragmentem zdania (między
 granicami słów), a struktura wyjścia musi pasować do gramatyki znaczników (`phee/gqa/constrained.py`).
+Wyjście ucięte limitem długości nie dokleja niedokończonego znacznika (np. „[Eff”) do
+odpowiedzi; liczba takich wyjść jest zapisywana (`stage1_truncated_outputs`,
+`stage2_truncated_outputs` w `summary.json`).
 
 ### LLM (`configs/llm/`)
 
@@ -279,8 +288,10 @@ zdanie na zbiorze testowym (wszystkie etapy pipeline'u), szczytowa pamięć GPU.
 - **Dane**: poprawiona wersja z 2024 r.; bez `Combination.Drug`.
 - **Baseline SL**: bez frameworku ACE (autorzy łączyli embeddingi kilku modeli),
   BioBERT z głowicą liniową.
-- **Baseline extractive QA**: triggery w naszej formule QA (autorzy: klasyfikacja tokenów
-  EEQA), pozostałe etapy z szablonami i ustawieniami autorów.
+- **Baseline extractive QA**: triggery w naszej formule QA z kilkoma odpowiedziami
+  (autorzy: klasyfikacja tokenów EEQA, w której każde słowo dostaje typ zdarzenia albo
+  „brak”, więc też można znaleźć kilka triggerów), pozostałe etapy z szablonami i
+  ustawieniami autorów.
 - **Ograniczenie SL**: w poprawionych danych 1185 spanów ma jednocześnie etykietę
   `SUBJECT_DISORDER` i `TREATMENT_DISORDER`, a 206 `DURATION` i `TIME_ELAPSED`. Jedna
   etykieta na token pozwala oddać tylko jedną z nich; górna granica SL dla subargumentów

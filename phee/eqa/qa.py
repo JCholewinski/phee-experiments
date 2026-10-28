@@ -107,12 +107,14 @@ def make_collate(pad_token_id):
 
 def predict_answers(model, tokenizer, examples, settings, max_answer_length=30,
                     n_best_size=20, max_spans=1, use_null=True, null_threshold=0.0,
-                    max_length=384, stride=128):
+                    max_length=384, stride=128, margin=None):
     """Answers for every example: list (per example) of
     {"text", "start", "end", "score"} with non-overlapping character spans.
 
     use_null  answer only if the span score exceeds the "no answer" ([CLS]) score
               plus `null_threshold`; otherwise the top `max_spans` spans are returned.
+    margin    if set, further spans only if their score is at most `margin` below the
+              best span (span probability >= exp(-margin) x the best one).
     """
     if not examples:
         return []
@@ -195,6 +197,8 @@ def predict_answers(model, tokenizer, examples, settings, max_answer_length=30,
         selected = []
         for candidate in example_candidates:
             if use_null and candidate["score"] <= null_scores[example_index] + null_threshold:
+                break
+            if margin is not None and selected and candidate["score"] < selected[0]["score"] - margin:
                 break
             if any(candidate["start"] < other["end"] and other["start"] < candidate["end"] for other in selected):
                 continue

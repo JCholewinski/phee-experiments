@@ -40,7 +40,11 @@ from phee.training import train_model, training_settings
 from phee.utils import GpuMemory, Timer, cleanup, log, set_seed
 
 DEFAULT_ANSWERS = {
-    "trigger": {"max_answer_length": 8, "max_spans": 1, "use_null": False, "null_threshold": 0.0},
+    # one trigger question per event type; several triggers of the same type are possible
+    # (extra spans within `margin` of the best one, margin chosen on dev from margin_grid,
+    # null = only the best span)
+    "trigger": {"max_answer_length": 8, "max_spans": 3, "use_null": False, "null_threshold": 0.0,
+                "margin_grid": [None, 0.5, 1.0, 2.0, 3.0]},
     "main": {"max_answer_length": 60, "max_spans": 3, "use_null": True, "null_threshold": 0.0},
     "sub": {"max_answer_length": 50, "max_spans": 3, "use_null": True, "null_threshold": 0.0},
 }
@@ -174,6 +178,7 @@ def _ask(model, tokenizer, queries, settings, answer_settings, model_config):
         max_spans=answer_settings["max_spans"],
         use_null=answer_settings["use_null"],
         null_threshold=answer_settings["null_threshold"],
+        margin=answer_settings.get("margin"),
         max_length=model_config.get("max_length", 384),
         stride=model_config.get("stride", 128),
     )
@@ -202,6 +207,47 @@ def predict_triggers(model, tokenizer, samples, event_types, templates, settings
                 "score": answer["score"],
             })
     return triggers
+
+
+def _single_answer(answer_settings):
+    return dict(answer_settings, max_spans=1, margin=None)
+
+
+def _within_margin(triggers, margin):
+    """Keep, for every (sentence, event type), the best trigger and the triggers whose score
+    is at most `margin` below it (None: only the best)."""
+    kept = []
+    for sample_triggers in triggers:
+        best = {}
+        for trigger in sample_triggers:
+            best[trigger["event_type"]] = max(best.get(trigger["event_type"], trigger["score"]), trigger["score"])
+        selected, has_best = [], set()
+        for trigger in sorted(sample_triggers, key=lambda t: -t["score"]):
+            event_type = trigger["event_type"]
+            if margin is None:
+                if event_type not in has_best:
+                    selected.append(trigger)
+                    has_best.add(event_type)
+            elif trigger["score"] >= best[event_type] - margin:
+                selected.append(trigger)
+        kept.append(selected)
+    return kept
+
+
+def tune_trigger_margin(model, tokenizer, samples, templates, settings, answer_settings, model_config):
+    """Margin for several triggers of one event type, chosen on dev (trigger classification
+    F1 with the gold event types). Ties go to the smaller margin."""
+    grid = answer_settings.get("margin_grid") or [None]
+    widest = max((m for m in grid if m is not None), default=None)
+    gold_types = [sorted({event["event_type"] for event in sample["events"]}) for sample in samples]
+    candidates = predict_triggers(model, tokenizer, samples, gold_types, templates, settings,
+                                  dict(answer_settings, margin=widest), model_config)
+    scores = {}
+    for margin in grid:
+        records = _records(samples, _within_margin(candidates, margin))
+        scores[margin] = score_families(samples, records, ["trigger_classification"])["f1"]
+    best = max(grid, key=lambda m: (scores[m], -(m if m is not None else -1)))
+    return best, {str(m): f1 for m, f1 in scores.items()}
 
 
 def predict_mains(model, tokenizer, samples, triggers, templates, settings, answer_settings, model_config):
@@ -364,18 +410,25 @@ def run(config, seed, run_dir):
         lambda m: score_families(
             es_dev,
             _records(es_dev, predict_triggers(m, tokenizer, es_dev, dev_gold_types, templates,
-                                                   settings, answer_config["trigger"], model_config)),
+                                                   settings, _single_answer(answer_config["trigger"]), model_config)),
             ["trigger_classification"],
         ),
         settings, seed, name="eqa_trigger",
     )
     report["parameters"] = count_parameters(model)
+    margin, margin_scores = tune_trigger_margin(model, tokenizer, data["dev"], templates, settings,
+                                                answer_config["trigger"], model_config)
+    report["trigger_margin"] = margin
+    report["trigger_margin_dev_f1"] = margin_scores
+    log(f"eqa: trigger margin {margin} (dev trigger F1 per margin: {margin_scores})")
+    trigger_answers = (_single_answer(answer_config["trigger"]) if margin is None
+                       else dict(answer_config["trigger"], margin=margin))
     recorder.add_stage(report)
     triggers = {}
     for split in splits:
         with GpuMemory() as memory, Timer() as timer:
             triggers[split] = predict_triggers(model, tokenizer, data[split], event_types[split], templates,
-                                               settings, answer_config["trigger"], model_config)
+                                               settings, trigger_answers, model_config)
         track(split, timer, memory)
     del model
     cleanup()

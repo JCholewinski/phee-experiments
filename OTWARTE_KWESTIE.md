@@ -4,58 +4,57 @@ Stan na 28.10.2026, koniec sesji implementacji (przerwanej z powodu limitu kredy
 
 ## Do decyzji
 
-1. **Model enkodera w SL i extractive QA.** W planie był Bio-ModernBERT. Zmieniłem na
-   `thomas-sounack/BioClinical-ModernBERT-base`, bo autorzy obu modeli piszą (karta modelu
-   i arXiv 2506.10896), że Bio-ModernBERT konsekwentnie wypadał gorzej. Powrót: jedna
-   linijka `model.name` w `configs/seq/own_base.yaml` i `configs/eqa/own_base.yaml`.
-   Jeśli zostaje BioClinical, trzeba też poprawić nazwę modelu w dokumencie z planem.
+1. **Model w generative QA.** Zasada: bierzemy to, co działa najlepiej, nie najnowsze.
+   T5Gemma nie ma wyników na PHEE. Flan-T5-large był najlepszym dostrojonym modelem na
+   PHEE w pracy Sun i in. 2024 (EM-F1 argumentów głównych 70.78 wobec 68.85 dla
+   generative QA ze SciFive; inny podział danych i format jednej sekwencji). Koszt:
+   ok. 2× dłuższy trening generative QA. Zmiana: `model.name: google/flan-t5-large`
+   w `configs/gqa/own_base.yaml` (+ ich hiperparametry: lr 3e-4, batch 32, warmup 0.06).
+2. **LLM.** Qwen3-8B zostaje. Llama-3.1-8B jest starsza i słabsza; jeśli ma być
+   najmocniejszy model mieszczący się w 24 GB: np. Qwen3-14B w FP8.
+
+Rozstrzygnięte: SL i extractive QA na BioClinical ModernBERT (wariant, który według
+autorów działał lepiej niż Bio-ModernBERT).
 
 ## Niesprawdzone lokalnie (brak GPU i dostępu do Hugging Face w środowisku)
 
-2. Prawdziwe modele i tokenizery (BioBERT, BioClinical ModernBERT, SciFive, T5Gemma):
+3. Prawdziwe modele i tokenizery (BioBERT, BioClinical ModernBERT, SciFive, T5Gemma):
    sprawdzi je `bash scripts/vast/quick_check.sh` (pierwszy krok na vast.ai).
-3. bf16 na GPU, pomiar pamięci GPU, czasy: również quick_check.
-4. **Część LLM (vLLM) w ogóle nie była uruchomiona** – lokalnie tylko backend `hf` na
+4. bf16 na GPU, pomiar pamięci GPU, czasy: również quick_check.
+5. **Część LLM (vLLM) w ogóle nie była uruchomiona** – lokalnie tylko backend `hf` na
    małym losowym modelu. Na vast.ai najpierw krótki test:
    `PYTHONPATH=$PWD /workspace/venv-llm/bin/python scripts/run_experiment.py --config configs/llm/qwen3_8b.yaml --output_dir results_quick --set data.limit=20 --force`
-5. ModernBERT: wbudowany `torch.compile` wyłączony (`model.compile: false`), bo wymaga
+6. ModernBERT: wbudowany `torch.compile` wyłączony (`model.compile: false`), bo wymaga
    kompilatora C na maszynie; można włączyć, jeśli quick_check pokaże, że działa i
    przyspiesza.
 
 ## Niedokończone weryfikacje
 
-6. Niezależny przegląd kodu (osobny agent) został przerwany przed końcem; jego
-   dotychczasowe uwagi są poniżej (jeśli zdążył je zwrócić).
-7. Pełny smoke test po ostatnich zmianach przeszedł we wszystkich 16 konfiguracjach
+7. Niezależny przegląd kodu (osobny agent) został przerwany przed końcem; jego
+   uwagi i stan poprawek są poniżej.
+8. Pełny smoke test po ostatnich zmianach przeszedł we wszystkich 16 konfiguracjach
    (CPU, małe losowe modele). Powtórka: `python scripts/smoke/make_tiny_models.py &&
    python scripts/smoke/run_smoke.py`.
 
 ## Koszt
 
-8. Najdłużej potrwa generative QA (etap 2: ok. 36 tys. pytań o subargumenty na epokę,
+9. Najdłużej potrwa generative QA (etap 2: ok. 36 tys. pytań o subargumenty na epokę,
    generowanie beam 3 na dev po każdej epoce). Szacunek bardzo zgrubny: kilkanaście godzin
    GPU dla całej macierzy; dokładne liczby da quick_check. Opcja oszczędności:
    `--set early_stopping_dev_limit=300`.
 
 ## Uwagi z przeglądu kodu
 
-Przegląd przerwany przed końcem; nic krytycznego. Zweryfikowane uwagi (nie poprawione):
+Przegląd przerwany przed końcem; nic krytycznego. Wszystkie zweryfikowane uwagi są
+**poprawione**:
 
-- **Extractive QA, kilka zdarzeń tego samego typu** (`configs/eqa/*.yaml`, `phee/eqa/runner.py`):
-  pytanie o trigger zwraca maks. 1 odpowiedź (`max_spans: 1`, `use_null: false`), więc
-  drugie zdarzenie tego samego typu w zdaniu nigdy nie zostanie znalezione (a w trybie
-  „predicted” jego argumenty nie trafią do treningu). Do wyboru: opisać jako ograniczenie
-  albo dopuścić drugi trigger, gdy jego wynik jest bliski najlepszemu.
-- **SL, spany zawierające token-spację** (`phee/seq/encoding.py`, `phee/seq/tagging.py`):
-  tokeny będące samymi spacjami są pomijane, więc span przez nie przechodzący rozpada się
-  na dwa. Dotyczy 3 spanów (2 w teście, np. „Implanon   failure”). Poprawka: pomijać te
-  tokeny przy składaniu spanów.
-- **Generative QA, ucięte wyjście** (`phee/gqa/format.py`, `parse_stage1`): gdy
-  generowanie urwie się w środku znacznika, fragment (np. „[Eff”) dokleja się do spanu;
-  gramatyka dopuszcza też powtórzenia „x ; x ; x”. Poprawka: odrzucać niedomknięty
-  znacznik na końcu i liczyć wyjścia ucięte limitem długości.
-- Pamięć GPU dla vLLM – **już poprawione** (raportowany rozmiar wag zamiast pamięci
-  zarezerwowanej przez vLLM).
+- Extractive QA: pytanie o trigger może zwrócić kilka odpowiedzi (margines wybierany
+  na dev), więc zdanie z dwoma zdarzeniami tego samego typu da się w pełni rozwiązać
+  (w teście 17 takich zdań).
+- SL: tokeny złożone z samych spacji usunięte przy konwersji danych (6 w całym zbiorze).
+- Generative QA: niedokończony znacznik na końcu uciętego wyjścia jest odrzucany, a
+  liczba uciętych wyjść zapisywana.
+- Pamięć GPU dla vLLM: raportowany rozmiar wag zamiast pamięci zarezerwowanej.
 
 Sprawdzone i poprawne: normalizacja identyczna z oficjalnym ewaluatorem autorów,
 konwersja danych (bez przecieków między train/dev/test), pozycje odpowiedzi w QA dla obu

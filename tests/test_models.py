@@ -104,6 +104,20 @@ def test_constrained_viterbi_repairs_invalid_bio():
     assert [TAGS[i] for i in constrained] == ["O", "B-X", "I-X"]
 
 
+def test_trigger_margin_selection():
+    from phee.eqa.runner import _within_margin
+
+    triggers = [[
+        {"event_type": "ADE", "text": "a", "score": 10.0},
+        {"event_type": "ADE", "text": "b", "score": 9.2},
+        {"event_type": "ADE", "text": "c", "score": 6.0},
+        {"event_type": "PTE", "text": "d", "score": 3.0},
+    ]]
+    assert [t["text"] for t in _within_margin(triggers, None)[0]] == ["a", "d"]
+    assert [t["text"] for t in _within_margin(triggers, 1.0)[0]] == ["a", "b", "d"]
+    assert [t["text"] for t in _within_margin(triggers, 5.0)[0]] == ["a", "b", "c", "d"]
+
+
 if __name__ == "__main__":
     failures = 0
     for name, function in sorted(globals().items()):

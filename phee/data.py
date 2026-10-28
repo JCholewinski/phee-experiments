@@ -137,6 +137,12 @@ def _dedupe(spans):
 
 def convert_record(record, tokens, stats):
     context = record["context"]
+    # The original tokenization (spaCy) keeps runs of extra spaces as whitespace-only
+    # tokens. They carry no content, the encoders drop them, and in sequence labeling
+    # they would split a span running across them into two, so they are removed here.
+    kept = [token for token in tokens if token.strip()]
+    stats["whitespace_tokens_removed"] += len(tokens) - len(kept)
+    tokens = kept
     offsets = align_tokens(context, tokens)
     events = []
 

@@ -82,11 +82,13 @@ class Generator:
         self.tokenizer = tokenizer
         self.generation = generation
         self.settings = settings
+        self.truncated = 0   # outputs of the last call cut off by max_new_tokens (no EOS)
 
     def __call__(self, model, inputs, samples, max_new_tokens, constraint=None):
         """inputs: list of source strings; samples: sentence of every input (constraints)."""
         device = get_device()
         outputs = []
+        self.truncated = 0
         batch_size = self.settings.get("eval_batch_size", 32)
         model.eval()
         for start in range(0, len(inputs), batch_size):
@@ -111,6 +113,8 @@ class Generator:
                 )
             with torch.no_grad(), autocast_context(self.settings.get("precision", "bf16")):
                 generated = model.generate(**kwargs)
+            eos = self.tokenizer.eos_token_id
+            self.truncated += sum(1 for row in generated.tolist() if eos not in row[1:])
             outputs.extend(self.tokenizer.batch_decode(generated, skip_special_tokens=True))
         if constraint is not None:
             constraint.clear()
@@ -335,6 +339,7 @@ def run(config, seed, run_dir):
                 texts = generate(model, inputs, data[split], generation["stage1_max_new_tokens"],
                                  constraints[decoding][0])
             track((decoding, split), timer, memory)
+            inference[(decoding, split)]["stage1_truncated_outputs"] = generate.truncated
             raw1[(decoding, split)] = texts
             stage1[(decoding, split)] = _stage1_predictions(texts, split_values)
     if need_train_predictions:
@@ -382,6 +387,7 @@ def run(config, seed, run_dir):
                 subs = _predict_stage2(model, generate, data[split], mains, templates, generation,
                                        constraints[decoding][1])
             track((decoding, split), timer, memory)
+            inference[(decoding, split)]["stage2_truncated_outputs"] = generate.truncated
             records = _records(data[split], triggers, mains, subs)
             for record, text in zip(records, raw1[(decoding, split)]):
                 record["generated_stage1"] = text

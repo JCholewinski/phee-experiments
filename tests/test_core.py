@@ -123,6 +123,19 @@ def test_bm25_finds_identical_sentence():
     assert retriever.top(documents[17], 1) == [17]
 
 
+def test_truncated_stage1_output():
+    from phee.gqa.format import parse_stage1
+
+    events = parse_stage1("[ADE] rash [Subject] 45-year-old woman [Eff")
+    assert events[0]["args"]["SUBJECT"] == ["45-year-old woman"]
+
+
+def test_no_whitespace_tokens():
+    for split in ("train", "dev", "test"):
+        samples = load_samples(DATA / f"{split}.jsonl")
+        assert all(token.strip() for sample in samples for token in sample["tokens"])
+
+
 if __name__ == "__main__":
     failures = 0
     for name, function in sorted(globals().items()):
