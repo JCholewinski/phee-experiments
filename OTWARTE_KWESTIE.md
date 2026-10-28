@@ -27,7 +27,7 @@ Stan na 28.10.2026, koniec sesji implementacji (przerwanej z powodu limitu kredy
 6. Niezależny przegląd kodu (osobny agent) został przerwany przed końcem; jego
    dotychczasowe uwagi są poniżej (jeśli zdążył je zwrócić).
 7. Pełny smoke test po ostatnich zmianach (ładowanie modeli, LLM, tabele) był w trakcie;
-   wcześniejsza wersja przeszła wszystkie 16 konfiguracji. Przed startem na vast.ai:
+   12 z 16 konfiguracji przeszło bez błędów (wcześniejsza wersja przeszła wszystkie 16). Przed startem na vast.ai:
    `python scripts/smoke/make_tiny_models.py && python scripts/smoke/run_smoke.py`
    (CPU, kilka minut).
 
@@ -40,4 +40,25 @@ Stan na 28.10.2026, koniec sesji implementacji (przerwanej z powodu limitu kredy
 
 ## Uwagi z przeglądu kodu
 
-(brak – uzupełnić)
+Przegląd przerwany przed końcem; nic krytycznego. Zweryfikowane uwagi (nie poprawione):
+
+- **Extractive QA, kilka zdarzeń tego samego typu** (`configs/eqa/*.yaml`, `phee/eqa/runner.py`):
+  pytanie o trigger zwraca maks. 1 odpowiedź (`max_spans: 1`, `use_null: false`), więc
+  drugie zdarzenie tego samego typu w zdaniu nigdy nie zostanie znalezione (a w trybie
+  „predicted” jego argumenty nie trafią do treningu). Do wyboru: opisać jako ograniczenie
+  albo dopuścić drugi trigger, gdy jego wynik jest bliski najlepszemu.
+- **SL, spany zawierające token-spację** (`phee/seq/encoding.py`, `phee/seq/tagging.py`):
+  tokeny będące samymi spacjami są pomijane, więc span przez nie przechodzący rozpada się
+  na dwa. Dotyczy 3 spanów (2 w teście, np. „Implanon   failure”). Poprawka: pomijać te
+  tokeny przy składaniu spanów.
+- **Generative QA, ucięte wyjście** (`phee/gqa/format.py`, `parse_stage1`): gdy
+  generowanie urwie się w środku znacznika, fragment (np. „[Eff”) dokleja się do spanu;
+  gramatyka dopuszcza też powtórzenia „x ; x ; x”. Poprawka: odrzucać niedomknięty
+  znacznik na końcu i liczyć wyjścia ucięte limitem długości.
+- Pamięć GPU dla vLLM – **już poprawione** (raportowany rozmiar wag zamiast pamięci
+  zarezerwowanej przez vLLM).
+
+Sprawdzone i poprawne: normalizacja identyczna z oficjalnym ewaluatorem autorów,
+konwersja danych (bez przecieków między train/dev/test), pozycje odpowiedzi w QA dla obu
+typów tokenizerów, early stopping z przywracaniem najlepszych wag, CRF i Viterbi w fp32,
+token startowy T5Gemma, dekodowanie ograniczone, czas BM25 (ok. 6 ms na zapytanie).
