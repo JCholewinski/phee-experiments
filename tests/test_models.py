@@ -104,18 +104,30 @@ def test_constrained_viterbi_repairs_invalid_bio():
     assert [TAGS[i] for i in constrained] == ["O", "B-X", "I-X"]
 
 
-def test_trigger_margin_selection():
-    from phee.eqa.runner import _within_margin
+def test_trigger_training_examples_have_no_answer_questions():
+    from phee.eqa.runner import trigger_training_examples
 
-    triggers = [[
-        {"event_type": "ADE", "text": "a", "score": 10.0},
-        {"event_type": "ADE", "text": "b", "score": 9.2},
-        {"event_type": "ADE", "text": "c", "score": 6.0},
-        {"event_type": "PTE", "text": "d", "score": 3.0},
-    ]]
-    assert [t["text"] for t in _within_margin(triggers, None)[0]] == ["a", "d"]
-    assert [t["text"] for t in _within_margin(triggers, 1.0)[0]] == ["a", "b", "d"]
-    assert [t["text"] for t in _within_margin(triggers, 5.0)[0]] == ["a", "b", "c", "d"]
+    sample = {"id": "s", "context": "rash after drug", "events": [
+        {"event_type": "ADE", "trigger": [{"text": "after", "start": 5}]},
+    ]}
+    examples = trigger_training_examples([sample], "current")
+    answers = sorted((e["question"], e["answer_text"]) for e in examples)
+    assert len(answers) == 2
+    assert {text for _, text in answers} == {"after", None}   # PTE question: no answer
+
+
+def test_trigger_tagger_labels_first_word():
+    from phee.eqa.runner import TAGGER_TAGS, tagger_items
+
+    class FakeEncoder:
+        def encode(self, sample):
+            return {"input_ids": [0], "word_positions": [], "valid_words": list(range(len(sample["tokens"])))}
+
+    sample = {"tokens": ["death", "due", "to", "drug"], "events": [
+        {"event_type": "ADE", "trigger": [{"tok_start": 1, "tok_end": 2}]},
+    ]}
+    item = tagger_items([sample], FakeEncoder(), with_labels=True)[0]
+    assert [TAGGER_TAGS[i] for i in item["labels"]] == ["O", "ADE", "O", "O"]
 
 
 if __name__ == "__main__":

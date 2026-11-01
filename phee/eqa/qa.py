@@ -107,14 +107,14 @@ def make_collate(pad_token_id):
 
 def predict_answers(model, tokenizer, examples, settings, max_answer_length=30,
                     n_best_size=20, max_spans=1, use_null=True, null_threshold=0.0,
-                    max_length=384, stride=128, margin=None):
+                    max_length=384, stride=128, min_spans=0):
     """Answers for every example: list (per example) of
     {"text", "start", "end", "score"} with non-overlapping character spans.
 
     use_null  answer only if the span score exceeds the "no answer" ([CLS]) score
               plus `null_threshold`; otherwise the top `max_spans` spans are returned.
-    margin    if set, further spans only if their score is at most `margin` below the
-              best span (span probability >= exp(-margin) x the best one).
+    min_spans at least this many spans even below the "no answer" score (trigger
+              questions: the event type classifier already said the event is there).
     """
     if not examples:
         return []
@@ -196,9 +196,8 @@ def predict_answers(model, tokenizer, examples, settings, max_answer_length=30,
         example_candidates.sort(key=lambda c: c["score"], reverse=True)
         selected = []
         for candidate in example_candidates:
-            if use_null and candidate["score"] <= null_scores[example_index] + null_threshold:
-                break
-            if margin is not None and selected and candidate["score"] < selected[0]["score"] - margin:
+            below_null = use_null and candidate["score"] <= null_scores[example_index] + null_threshold
+            if below_null and len(selected) >= min_spans:
                 break
             if any(candidate["start"] < other["end"] and other["start"] < candidate["end"] for other in selected):
                 continue

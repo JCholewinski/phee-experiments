@@ -223,23 +223,29 @@ dla subargumentów częstsza etykieta wygrywa).
 
 ### Extractive QA (`configs/eqa/`)
 
-Pipeline: klasyfikator typu zdarzenia → pytanie o trigger dla każdego typu → pytania o
-SUBJECT / TREATMENT / EFFECT dla każdego triggera → pytania o subargumenty dla każdego
-argumentu głównego. Każdy etap ma własny model i własny early stopping.
+Własny pipeline: klasyfikator typu zdarzenia → pytanie o trigger dla każdego typu →
+pytania o SUBJECT / TREATMENT / EFFECT dla każdego triggera → pytania o subargumenty dla
+każdego argumentu głównego. Każdy etap ma własny model i własny early stopping.
 
-| Config | Szablony | Trening etapów 3–4 |
-|---|---|---|
-| `authors_baseline` | autorów (EEQA) | na danych referencyjnych, BioBERT |
-| `own_current_predicted` (bazowy) | obecne | na predykcjach poprzedniego etapu |
-| `own_current_gold` | obecne | na danych referencyjnych |
-| `own_authors_predicted` | autorów | na predykcjach |
-| `own_definitions_predicted` | obecne + definicja etykiety | na predykcjach |
+Baseline autorów szuka triggerów jak w artykule (EEQA): tagger słów, który pierwszemu
+słowu każdego triggera nadaje typ zdarzenia (O / ADE / PTE); każde oznaczone słowo to
+trigger. Klasyfikatora typu zdarzenia wtedy nie ma.
 
-Pytanie o argument może mieć kilka odpowiedzi (powyżej wyniku „brak odpowiedzi”, maks. 3).
-Pytanie o trigger zwraca najlepszy span i ewentualnie kolejne (maks. 3), jeśli ich wynik
-jest najwyżej o `margin` niższy od najlepszego, czyli są co najmniej e^(−margin) razy tak
-prawdopodobne. `margin` wybierany jest na dev z siatki {tylko najlepszy, 0.5, 1, 2, 3}
-(miara: F1 triggerów), więc w zdaniu można znaleźć kilka zdarzeń tego samego typu.
+| Config | Triggery | Szablony | Trening etapów 3–4 |
+|---|---|---|---|
+| `authors_baseline` | tagger słów (EEQA) | autorów | na danych referencyjnych, BioBERT |
+| `own_current_predicted` (bazowy) | pytanie | obecne | na predykcjach poprzedniego etapu |
+| `own_current_gold` | pytanie | obecne | na danych referencyjnych |
+| `own_authors_predicted` | pytanie | autorów | na predykcjach |
+| `own_definitions_predicted` | pytanie | obecne + definicja etykiety | na predykcjach |
+
+Wybór odpowiedzi jak w kodzie autorów: fragmenty posortowane według wyniku start+end,
+brane od najlepszego aż do wyniku „brak odpowiedzi” ([CLS]), bez nakładających się,
+maks. 2 na pytanie. Pytanie o trigger działa tak samo, ale zawsze zwraca co najmniej jedną
+odpowiedź (klasyfikator już stwierdził, że zdarzenie tego typu jest w zdaniu), więc w
+zdaniu można znaleźć dwa zdarzenia tego samego typu. Żeby model nauczył się „braku
+odpowiedzi” przy triggerach, w treningu są też pytania o typ zdarzenia, którego w zdaniu
+nie ma.
 
 ### Generative QA (`configs/gqa/`)
 
@@ -288,10 +294,9 @@ zdanie na zbiorze testowym (wszystkie etapy pipeline'u), szczytowa pamięć GPU.
 - **Dane**: poprawiona wersja z 2024 r.; bez `Combination.Drug`.
 - **Baseline SL**: bez frameworku ACE (autorzy łączyli embeddingi kilku modeli),
   BioBERT z głowicą liniową.
-- **Baseline extractive QA**: triggery w naszej formule QA z kilkoma odpowiedziami
-  (autorzy: klasyfikacja tokenów EEQA, w której każde słowo dostaje typ zdarzenia albo
-  „brak”, więc też można znaleźć kilka triggerów), pozostałe etapy z szablonami i
-  ustawieniami autorów.
+- **Baseline extractive QA**: tagger triggerów jak w EEQA, ale bez stałego zapytania
+  „null” na wejściu i z pełną tokenizacją słów (autorzy podawali modelowi tylko pierwszy
+  sub-token każdego słowa); bez znacznika pozycji triggera w pytaniach o argumenty.
 - **Ograniczenie SL**: w poprawionych danych 1185 spanów ma jednocześnie etykietę
   `SUBJECT_DISORDER` i `TREATMENT_DISORDER`, a 206 `DURATION` i `TIME_ELAPSED`. Jedna
   etykieta na token pozwala oddać tylko jedną z nich; górna granica SL dla subargumentów

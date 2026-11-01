@@ -6,6 +6,16 @@ Stages (each with its own model, trained with early stopping on its own dev task
   3. main-argument QA: one question per (predicted trigger, SUBJECT / TREATMENT / EFFECT)
   4. sub-argument QA: one question per (predicted main argument, sub-argument label)
 
+Trigger detection (`trigger_mode`):
+  question  stages 1-2 above (own pipeline). A question returns every span scored above
+            "no answer" (at least one, at most `max_spans`); to learn "no answer", trigger
+            questions about event types absent from the sentence are added in training.
+  tagger    as in the PHEE paper (EEQA): no stage 1, a word tagger labels the FIRST word of
+            every trigger with its event type (O / ADE / PTE); every tagged word is a trigger.
+
+Answers (as in the authors' EEQA code): spans sorted by score, taken until the "no answer"
+score is reached, overlapping spans skipped, at most `max_spans` (authors: 2).
+
 Variants:
   templates     authors | current | definitions          (phee.eqa.templates)
   train_inputs  gold      stages 3 and 4 are trained on questions built from gold
@@ -21,8 +31,9 @@ Config (configs/eqa/*.yaml):
   train_inputs: predicted
   model: {name, max_length: 384, stride: 128}
   event_type: {threshold: 0.5, force_one: true, max_length: 256}
+  trigger_mode: question | tagger
   answers:
-    trigger: {max_answer_length, max_spans, use_null, null_threshold}
+    trigger: {max_answer_length, max_spans, use_null, null_threshold, min_spans}
     main:    {...}
     sub:     {...}
   training: common settings;  stage_training: {event_type|trigger|main|sub: overrides}
@@ -33,21 +44,18 @@ from phee.eqa.qa import accepts_token_type_ids, make_collate, predict_answers, t
 from phee.eqa.templates import main_question, sub_question, trigger_question
 from phee.evaluation import score_families
 from phee.experiment import RunRecorder, early_stopping_dev, load_splits
-from phee.hf import count_parameters, load_tokenizer, model_kwargs
+from phee.hf import count_parameters, load_encoder, load_tokenizer, model_kwargs
 from phee.io import deep_update
-from phee.schema import MAIN_LABELS, SUB_LABELS_BY_PARENT
+from phee.schema import EVENT_TYPES, MAIN_LABELS, SUB_LABELS_BY_PARENT
 from phee.training import train_model, training_settings
 from phee.utils import GpuMemory, Timer, cleanup, log, set_seed
 
 DEFAULT_ANSWERS = {
-    # one trigger question per event type; several triggers of the same type are possible
-    # (extra spans within `margin` of the best one, margin chosen on dev from margin_grid,
-    # null = only the best span)
-    "trigger": {"max_answer_length": 8, "max_spans": 3, "use_null": False, "null_threshold": 0.0,
-                "margin_grid": [None, 0.5, 1.0, 2.0, 3.0]},
-    "main": {"max_answer_length": 60, "max_spans": 3, "use_null": True, "null_threshold": 0.0},
-    "sub": {"max_answer_length": 50, "max_spans": 3, "use_null": True, "null_threshold": 0.0},
+    "trigger": {"max_answer_length": 8, "max_spans": 2, "use_null": True, "null_threshold": 0.0, "min_spans": 1},
+    "main": {"max_answer_length": 60, "max_spans": 2, "use_null": True, "null_threshold": 0.0},
+    "sub": {"max_answer_length": 50, "max_spans": 2, "use_null": True, "null_threshold": 0.0},
 }
+TAGGER_TAGS = ["O"] + EVENT_TYPES
 
 
 def _distance(a_start, a_end, b_start, b_end):
@@ -88,14 +96,56 @@ def _answered(sample, question, spans):
 # ----------------------------------------------------------------- training examples
 
 def trigger_training_examples(samples, templates):
+    """One example per gold trigger; event types absent from the sentence give a "no
+    answer" example, so that the model learns when a span is NOT a trigger."""
     examples = []
     for sample in samples:
-        by_type = {}
+        by_type = {event_type: [] for event_type in EVENT_TYPES}
         for event in sample["events"]:
-            by_type.setdefault(event["event_type"], []).extend(event["trigger"])
+            by_type[event["event_type"]].extend(event["trigger"])
         for event_type, spans in by_type.items():
             examples += _answered(sample, trigger_question(event_type, templates), spans)
     return _unique_examples(examples)
+
+
+def tagger_items(samples, encoder, with_labels):
+    """Word tagger for triggers (authors' EEQA): the first word of every trigger gets the
+    event type, every other word O."""
+    items = []
+    for sample in samples:
+        item = encoder.encode(sample)
+        if with_labels:
+            tags = ["O"] * len(sample["tokens"])
+            for event in sample["events"]:
+                for span in event["trigger"]:
+                    if span["tok_start"] is not None:
+                        tags[span["tok_start"]] = event["event_type"]
+            item = dict(item, labels=[TAGGER_TAGS.index(tags[word]) for word in item["valid_words"]])
+        items.append(item)
+    return items
+
+
+def predict_trigger_tags(model, samples, items, collate, settings):
+    from phee.seq.decoding import argmax_decode
+    from phee.seq.runner import _emissions
+
+    triggers = []
+    index = 0
+    for scores, word_mask in _emissions(model, items, collate, settings["eval_batch_size"], settings["precision"]):
+        for row in argmax_decode(scores, word_mask):
+            sample, item = samples[index], items[index]
+            sample_triggers = []
+            for position, tag_id in enumerate(row):
+                if TAGGER_TAGS[tag_id] == "O":
+                    continue
+                start, end = sample["token_offsets"][item["valid_words"][position]]
+                sample_triggers.append({
+                    "label": "TRIGGER", "event_type": TAGGER_TAGS[tag_id],
+                    "text": sample["context"][start:end], "start": start, "end": end,
+                })
+            triggers.append(sample_triggers)
+            index += 1
+    return triggers
 
 
 def _match_event_by_trigger(sample, trigger):
@@ -178,7 +228,7 @@ def _ask(model, tokenizer, queries, settings, answer_settings, model_config):
         max_spans=answer_settings["max_spans"],
         use_null=answer_settings["use_null"],
         null_threshold=answer_settings["null_threshold"],
-        margin=answer_settings.get("margin"),
+        min_spans=answer_settings.get("min_spans", 0),
         max_length=model_config.get("max_length", 384),
         stride=model_config.get("stride", 128),
     )
@@ -207,47 +257,6 @@ def predict_triggers(model, tokenizer, samples, event_types, templates, settings
                 "score": answer["score"],
             })
     return triggers
-
-
-def _single_answer(answer_settings):
-    return dict(answer_settings, max_spans=1, margin=None)
-
-
-def _within_margin(triggers, margin):
-    """Keep, for every (sentence, event type), the best trigger and the triggers whose score
-    is at most `margin` below it (None: only the best)."""
-    kept = []
-    for sample_triggers in triggers:
-        best = {}
-        for trigger in sample_triggers:
-            best[trigger["event_type"]] = max(best.get(trigger["event_type"], trigger["score"]), trigger["score"])
-        selected, has_best = [], set()
-        for trigger in sorted(sample_triggers, key=lambda t: -t["score"]):
-            event_type = trigger["event_type"]
-            if margin is None:
-                if event_type not in has_best:
-                    selected.append(trigger)
-                    has_best.add(event_type)
-            elif trigger["score"] >= best[event_type] - margin:
-                selected.append(trigger)
-        kept.append(selected)
-    return kept
-
-
-def tune_trigger_margin(model, tokenizer, samples, templates, settings, answer_settings, model_config):
-    """Margin for several triggers of one event type, chosen on dev (trigger classification
-    F1 with the gold event types). Ties go to the smaller margin."""
-    grid = answer_settings.get("margin_grid") or [None]
-    widest = max((m for m in grid if m is not None), default=None)
-    gold_types = [sorted({event["event_type"] for event in sample["events"]}) for sample in samples]
-    candidates = predict_triggers(model, tokenizer, samples, gold_types, templates, settings,
-                                  dict(answer_settings, margin=widest), model_config)
-    scores = {}
-    for margin in grid:
-        records = _records(samples, _within_margin(candidates, margin))
-        scores[margin] = score_families(samples, records, ["trigger_classification"])["f1"]
-    best = max(grid, key=lambda m: (scores[m], -(m if m is not None else -1)))
-    return best, {str(m): f1 for m, f1 in scores.items()}
 
 
 def predict_mains(model, tokenizer, samples, triggers, templates, settings, answer_settings, model_config):
@@ -346,6 +355,7 @@ def run(config, seed, run_dir):
     model_config = config["model"]
     templates = config.get("templates", "current")
     train_inputs = config.get("train_inputs", "predicted")
+    trigger_mode = config.get("trigger_mode", "question")
     answer_config = deep_update(DEFAULT_ANSWERS, config.get("answers") or {})
     event_config = {"threshold": 0.5, "force_one": True, "max_length": 256}
     event_config.update(config.get("event_type") or {})
@@ -364,80 +374,110 @@ def run(config, seed, run_dir):
             peaks = [p for p in (inference[split]["peak_gpu_memory_gb"], memory.peak_gb) if p is not None]
             inference[split]["peak_gpu_memory_gb"] = max(peaks) if peaks else None
 
-    # 1. event type classifier ---------------------------------------------------------
-    settings = _stage_settings(config, "event_type")
-    log(f"eqa: stage 1 event type classifier ({model_config['name']})")
-    set_seed(seed)  # new heads are initialised with this seed
-    model = AutoModelForSequenceClassification.from_pretrained(
-        model_config["name"], num_labels=2, problem_type="multi_label_classification", **load_kwargs
-    )
-    train_items = event_type_stage.features(data["train"], tokenizer, event_config["max_length"])
-    model, report = train_model(
-        model, train_items, event_type_stage.make_collate(pad_id),
-        lambda m: event_type_stage.score(
-            es_dev,
-            event_type_stage.predict(m, tokenizer, es_dev, settings, event_config["threshold"],
-                                     event_config["force_one"], event_config["max_length"]),
-        ),
-        settings, seed, name="eqa_event_type",
-    )
-    report["parameters"] = count_parameters(model)
-    recorder.add_stage(report)
-    event_types = {}
-    for split in splits:
-        with GpuMemory() as memory, Timer() as timer:
-            predictions = event_type_stage.predict(
-                model, tokenizer, data[split], settings, event_config["threshold"],
-                event_config["force_one"], event_config["max_length"],
-            )
-        track(split, timer, memory)
-        event_types[split] = [p["types"] for p in predictions]
-    del model
-    cleanup()
-
-    # 2. trigger QA -----------------------------------------------------------------
-    settings = _stage_settings(config, "trigger")
-    log("eqa: stage 2 trigger QA")
-    set_seed(seed)  # new heads are initialised with this seed
-    model = AutoModelForQuestionAnswering.from_pretrained(model_config["name"], **load_kwargs)
-    use_types = accepts_token_type_ids(model)
     qa_collate = make_collate(pad_id)
     max_length, stride = model_config.get("max_length", 384), model_config.get("stride", 128)
-    train_items = train_features(trigger_training_examples(data["train"], templates), tokenizer, max_length, stride, use_types)
-    dev_gold_types = [sorted({event["event_type"] for event in sample["events"]}) for sample in es_dev]
-    model, report = train_model(
-        model, train_items, qa_collate,
-        lambda m: score_families(
-            es_dev,
-            _records(es_dev, predict_triggers(m, tokenizer, es_dev, dev_gold_types, templates,
-                                                   settings, _single_answer(answer_config["trigger"]), model_config)),
-            ["trigger_classification"],
-        ),
-        settings, seed, name="eqa_trigger",
-    )
-    report["parameters"] = count_parameters(model)
-    margin, margin_scores = tune_trigger_margin(model, tokenizer, data["dev"], templates, settings,
-                                                answer_config["trigger"], model_config)
-    report["trigger_margin"] = margin
-    report["trigger_margin_dev_f1"] = margin_scores
-    log(f"eqa: trigger margin {margin} (dev trigger F1 per margin: {margin_scores})")
-    trigger_answers = (_single_answer(answer_config["trigger"]) if margin is None
-                       else dict(answer_config["trigger"], margin=margin))
-    recorder.add_stage(report)
     triggers = {}
-    for split in splits:
-        with GpuMemory() as memory, Timer() as timer:
-            triggers[split] = predict_triggers(model, tokenizer, data[split], event_types[split], templates,
-                                               settings, trigger_answers, model_config)
-        track(split, timer, memory)
-    del model
-    cleanup()
+
+    if trigger_mode == "question":
+        # 1. event type classifier -----------------------------------------------------
+        settings = _stage_settings(config, "event_type")
+        log(f"eqa: stage 1 event type classifier ({model_config['name']})")
+        set_seed(seed)  # new heads are initialised with this seed
+        model = AutoModelForSequenceClassification.from_pretrained(
+            model_config["name"], num_labels=2, problem_type="multi_label_classification", **load_kwargs
+        )
+        train_items = event_type_stage.features(data["train"], tokenizer, event_config["max_length"])
+        model, report = train_model(
+            model, train_items, event_type_stage.make_collate(pad_id),
+            lambda m: event_type_stage.score(
+                es_dev,
+                event_type_stage.predict(m, tokenizer, es_dev, settings, event_config["threshold"],
+                                         event_config["force_one"], event_config["max_length"]),
+            ),
+            settings, seed, name="eqa_event_type",
+        )
+        report["parameters"] = count_parameters(model)
+        recorder.add_stage(report)
+        event_types = {}
+        for split in splits:
+            with GpuMemory() as memory, Timer() as timer:
+                predictions = event_type_stage.predict(
+                    model, tokenizer, data[split], settings, event_config["threshold"],
+                    event_config["force_one"], event_config["max_length"],
+                )
+            track(split, timer, memory)
+            event_types[split] = [p["types"] for p in predictions]
+        del model
+        cleanup()
+
+        # 2. trigger QA ------------------------------------------------------------------
+        settings = _stage_settings(config, "trigger")
+        log("eqa: stage 2 trigger QA")
+        set_seed(seed)
+        model = AutoModelForQuestionAnswering.from_pretrained(model_config["name"], **load_kwargs)
+        use_types = accepts_token_type_ids(model)
+        train_items = train_features(trigger_training_examples(data["train"], templates), tokenizer,
+                                     max_length, stride, use_types)
+        dev_gold_types = [sorted({event["event_type"] for event in sample["events"]}) for sample in es_dev]
+        model, report = train_model(
+            model, train_items, qa_collate,
+            lambda m: score_families(
+                es_dev,
+                _records(es_dev, predict_triggers(m, tokenizer, es_dev, dev_gold_types, templates,
+                                                       settings, answer_config["trigger"], model_config)),
+                ["trigger_classification"],
+            ),
+            settings, seed, name="eqa_trigger",
+        )
+        report["parameters"] = count_parameters(model)
+        recorder.add_stage(report)
+        for split in splits:
+            with GpuMemory() as memory, Timer() as timer:
+                triggers[split] = predict_triggers(model, tokenizer, data[split], event_types[split], templates,
+                                                   settings, answer_config["trigger"], model_config)
+            track(split, timer, memory)
+        del model
+        cleanup()
+
+    elif trigger_mode == "tagger":
+        # 1-2. trigger word tagger (authors' EEQA) -----------------------------------------
+        from phee.seq.encoding import WordEncoder
+        from phee.seq.encoding import make_collate as word_collate
+        from phee.seq.model import TokenTagger
+
+        settings = _stage_settings(config, "trigger")
+        log(f"eqa: trigger word tagger ({model_config['name']})")
+        encoder = WordEncoder(tokenizer, max_length=model_config.get("tagger_max_length", 512))
+        collate = word_collate(pad_id)
+        set_seed(seed)
+        model = TokenTagger(load_encoder(model_config["name"], **load_kwargs), TAGGER_TAGS, head="linear")
+        es_items = tagger_items(es_dev, encoder, with_labels=False)
+        model, report = train_model(
+            model, tagger_items(data["train"], encoder, with_labels=True), collate,
+            lambda m: score_families(
+                es_dev, _records(es_dev, predict_trigger_tags(m, es_dev, es_items, collate, settings)),
+                ["trigger_classification"],
+            ),
+            settings, seed, name="eqa_trigger_tagger",
+        )
+        report["parameters"] = count_parameters(model)
+        recorder.add_stage(report)
+        for split in splits:
+            with GpuMemory() as memory, Timer() as timer:
+                items = tagger_items(data[split], encoder, with_labels=False)
+                triggers[split] = predict_trigger_tags(model, data[split], items, collate, settings)
+            track(split, timer, memory)
+        del model
+        cleanup()
+    else:
+        raise ValueError(f"Unknown trigger_mode: {trigger_mode}")
 
     # 3. main-argument QA -----------------------------------------------------------
     settings = _stage_settings(config, "main")
     log(f"eqa: stage 3 main-argument QA (train inputs: {train_inputs})")
     set_seed(seed)  # new heads are initialised with this seed
     model = AutoModelForQuestionAnswering.from_pretrained(model_config["name"], **load_kwargs)
+    use_types = accepts_token_type_ids(model)
     examples = main_training_examples(
         data["train"], templates, triggers["train"] if need_train_predictions else None
     )
@@ -505,7 +545,7 @@ def run(config, seed, run_dir):
     del model
     cleanup()
 
-    variant = f"templates={templates},train_inputs={train_inputs}"
+    variant = f"triggers={trigger_mode},templates={templates},train_inputs={train_inputs}"
     for split in ("dev", "test"):
         records = _records(data[split], triggers[split], mains[split], subs[split])
         for record, trig, main, sub in zip(records, triggers[split], mains[split], subs[split]):
