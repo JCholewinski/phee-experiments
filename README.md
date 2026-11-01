@@ -297,7 +297,7 @@ zdanie na zbiorze testowym (wszystkie etapy pipeline'u), szczytowa pamięć GPU.
 - **Baseline extractive QA**: tagger triggerów jak w EEQA, ale bez stałego zapytania
   „null” na wejściu i z pełną tokenizacją słów (autorzy podawali modelowi tylko pierwszy
   sub-token każdego słowa); bez znacznika pozycji triggera w pytaniach o argumenty.
-- **Ograniczenie SL**: w poprawionych danych 1185 spanów ma jednocześnie etykietę
+- **Ograniczenie SL**: w poprawionych danych 1183 spany (239 w teście) mają jednocześnie etykietę
   `SUBJECT_DISORDER` i `TREATMENT_DISORDER`, a 206 `DURATION` i `TIME_ELAPSED`. Jedna
   etykieta na token pozwala oddać tylko jedną z nich; górna granica SL dla subargumentów
   to ok. 93.7 F1 (`scripts/tag_ceiling.py`).
