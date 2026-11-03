@@ -9,6 +9,9 @@ set -uo pipefail
 cd "$(dirname "$0")/../.."
 export PYTHONPATH="$PWD"
 export HF_HOME="${HF_HOME:-/workspace/hf}"
+if ! command -v python >/dev/null 2>&1 && [[ -f /venv/main/bin/activate ]]; then
+  source /venv/main/bin/activate   # vast.ai PyTorch images keep Python in /venv/main
+fi
 
 configs=(
   seq/authors_baseline
