@@ -24,7 +24,7 @@ cat <<'EOF'
 
 Setup done. Next steps:
   1. Accept the Gemma license for google/t5gemma-b-b-ul2 (and Llama 3.1 for the LLM part)
-     on huggingface.co, then:   hf auth login
+     on huggingface.co, then:   python -c "from huggingface_hub import login; login()"
   2. export HF_HOME=/workspace/hf PYTHONPATH=$PWD
   3. Quick check on real models (downloads models, ~1 epoch on 200 sentences per method):
        bash scripts/vast/quick_check.sh

@@ -72,7 +72,7 @@ Dane są już w repozytorium w postaci po konwersji. Gdybyś chciał je wygenero
 stronie modelu w Hugging Face (raz, na koncie). Potem zaloguj się tokenem na maszynie:
 
 ```bash
-hf auth login          # starsze wersje huggingface_hub: huggingface-cli login
+python -c "from huggingface_hub import login; login()"   # albo: hf auth login
 ```
 
 Pozostałe modele (BioBERT, BioClinical ModernBERT, SciFive) są dostępne bez logowania.
