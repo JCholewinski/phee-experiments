@@ -1,4 +1,12 @@
 # Experiment groups for scripts/run_matrix.py (each config x each seed).
+#
+# Main plan (decision of 3.11.2026): two versions per method, the authors' baseline and
+# the improved version.
+#   test mode:     python scripts/run_matrix.py --groups baselines improved --seeds 1
+#                  (+ the llm group in the vLLM environment)
+#   final results: python scripts/run_matrix.py --groups baselines improved --seeds 2 3
+# The extra_* groups hold the remaining implemented variants (ablations), not run by
+# default.
 groups:
   baselines:                    # reproductions of the PHEE paper settings
     seeds: [1, 2, 3]
@@ -6,29 +14,38 @@ groups:
       - configs/seq/authors_baseline.yaml
       - configs/eqa/authors_baseline.yaml
       - configs/gqa/authors_baseline.yaml
-  seq:                          # heads x decodings (decodings evaluated inside each run)
+  improved:                     # the improved version of every method
     seeds: [1, 2, 3]
     configs:
-      - configs/seq/own_linear.yaml
-      - configs/seq/own_mlp.yaml
-      - configs/seq/own_crf.yaml
-  eqa:                          # one factor at a time from the base variant
-    seeds: [1, 2, 3]
-    configs:
+      - configs/seq/own_crf.yaml                  # argmax and Viterbi decoding inside the run
       - configs/eqa/own_current_predicted.yaml
-      - configs/eqa/own_current_gold.yaml
-      - configs/eqa/own_authors_predicted.yaml
-      - configs/eqa/own_definitions_predicted.yaml
-  gqa:                          # one factor at a time; free vs constrained inside each run
-    seeds: [1, 2, 3]
-    configs:
-      - configs/gqa/own_current_predicted.yaml
-      - configs/gqa/own_current_gold.yaml
-      - configs/gqa/own_authors_predicted.yaml
-      - configs/gqa/own_definitions_predicted.yaml
-  llm:                          # greedy decoding: deterministic, one run
+      - configs/gqa/own_current_predicted.yaml    # free and constrained decoding inside the run
+  llm:                          # greedy decoding: deterministic, one run; 0-shot and 5-shot inside
     seeds: [1]
     fixed_seeds: true
     configs:
       - configs/llm/qwen3_8b.yaml
+
+  # ---- optional: remaining variants (not part of the main plan) ----
+  extra_seq_heads:
+    seeds: [1, 2, 3]
+    configs:
+      - configs/seq/own_linear.yaml
+      - configs/seq/own_mlp.yaml
+  extra_eqa_variants:
+    seeds: [1, 2, 3]
+    configs:
+      - configs/eqa/own_current_gold.yaml
+      - configs/eqa/own_authors_predicted.yaml
+      - configs/eqa/own_definitions_predicted.yaml
+  extra_gqa_variants:
+    seeds: [1, 2, 3]
+    configs:
+      - configs/gqa/own_current_gold.yaml
+      - configs/gqa/own_authors_predicted.yaml
+      - configs/gqa/own_definitions_predicted.yaml
+  extra_llm:
+    seeds: [1]
+    fixed_seeds: true
+    configs:
       - configs/llm/llama31_8b.yaml

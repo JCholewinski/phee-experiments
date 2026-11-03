@@ -10,6 +10,9 @@ Rozstrzygnięte:
 - SL i extractive QA: BioClinical ModernBERT (według autorów lepszy niż Bio-ModernBERT).
 - Generative QA: zostaje T5Gemma (decyzja z 29.10).
 - LLM: zostają Qwen3-8B i Llama-3.1-8B.
+- Plan eksperymentów (3.11): dwie wersje na metodę, baseline autorów i wersja poprawiona
+  (SL `own_crf`, extractive QA i generative QA `own_current_predicted`, LLM Qwen3-8B 0/5-shot);
+  najpierw tryb testowy na seedzie 1, potem seedy 2 i 3. Reszta wariantów w grupach `extra_*`.
 - Extractive QA (1.11): baseline autorów z taggerem triggerów jak w EEQA; własny pipeline
   z pytaniem o trigger, które zwraca wszystkie odpowiedzi powyżej „brak odpowiedzi”
   (min. 1); limit 2 odpowiedzi na pytanie wszędzie, jak w kodzie autorów.
@@ -36,10 +39,8 @@ Rozstrzygnięte:
 
 ## Koszt
 
-9. Najdłużej potrwa generative QA (etap 2: ok. 36 tys. pytań o subargumenty na epokę,
-   generowanie beam 3 na dev po każdej epoce). Szacunek bardzo zgrubny: kilkanaście godzin
-   GPU dla całej macierzy; dokładne liczby da quick_check. Opcja oszczędności:
-   `--set early_stopping_dev_limit=300`.
+9. Szacunek (3.11) dla planu głównego: tryb testowy ok. 4 h na RTX 4090 / 6 h na 3090,
+   seedy 2 i 3 ok. 6 h / 8–9 h; najdłużej generative QA. Dokładne liczby da quick_check.
 
 ## Uwagi z przeglądu kodu
 

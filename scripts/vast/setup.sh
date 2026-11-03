@@ -28,6 +28,6 @@ Setup done. Next steps:
   2. export HF_HOME=/workspace/hf PYTHONPATH=$PWD
   3. Quick check on real models (downloads models, ~1 epoch on 200 sentences per method):
        bash scripts/vast/quick_check.sh
-  4. Full experiments:
-       nohup python scripts/run_matrix.py --groups baselines seq eqa gqa --seeds 1 2 3 > matrix.log 2>&1 &
+  4. Test mode (seed 1), then the remaining seeds (see README, section 5):
+       nohup sh -c 'python scripts/run_matrix.py --groups baselines improved --seeds 1; /workspace/venv-llm/bin/python scripts/run_matrix.py --groups llm' > matrix.log 2>&1 &
 EOF

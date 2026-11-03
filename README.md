@@ -109,14 +109,25 @@ Na końcu skrypt wypisuje dla każdego etapu czas jednej epoki przeliczony na pe
 (trening i ocena na dev) oraz szczytową pamięć GPU. Wyniki trafiają do `results_quick/`
 (oddzielnie od właściwych wyników, wyniki jakości są tu bez znaczenia).
 
-### 5. Pełne eksperymenty
+### 5. Eksperymenty
+
+Plan główny: dla każdej metody dwie wersje, baseline autorów (grupa `baselines`) i wersja
+poprawiona (grupa `improved`: SL z CRF, extractive QA i generative QA w wariancie
+bazowym). Najpierw tryb testowy na seedzie 1 (z LLM), potem seedy 2 i 3:
 
 ```bash
-# kolejność: baseline'y, SL, extractive QA, generative QA (3 seedy każdy)
-nohup python scripts/run_matrix.py --groups baselines seq eqa gqa --seeds 1 2 3 > matrix.log 2>&1 &
+# tryb testowy: 6 przebiegów + LLM (Qwen3-8B, 0- i 5-shot)
+nohup sh -c 'python scripts/run_matrix.py --groups baselines improved --seeds 1; /workspace/venv-llm/bin/python scripts/run_matrix.py --groups llm' > matrix.log 2>&1 &
+# wyniki końcowe: pozostałe seedy (przebiegi z seedem 1 się liczą, jeśli kod się nie zmienił)
+nohup python scripts/run_matrix.py --groups baselines improved --seeds 2 3 > matrix2.log 2>&1 &
 tail -f matrix.log
-python scripts/run_matrix.py --list          # co zrobione, co zostało
+python scripts/run_matrix.py --groups baselines improved llm --list   # co zrobione, co zostało
 ```
+
+Pozostałe zaimplementowane warianty (inne głowice SL, szablony i trening na danych
+referencyjnych w QA, Llama 3.1) są w grupach `extra_*` w `configs/matrix.yaml` i nie są
+uruchamiane domyślnie. Jeśli po trybie testowym zmieni się kod jakiejś metody, usuń jej
+katalogi z `results/`, żeby przebiegi z seedem 1 policzyły się od nowa.
 
 - Przebiegi trwają różnie: SL kilka minut, extractive QA kilkadziesiąt minut, generative QA
   najdłużej (generowanie na dev po każdej epoce). Dokładny czas epoki widać w szybkim
@@ -137,7 +148,7 @@ python -m venv /workspace/venv-llm
 /workspace/venv-llm/bin/pip install -r requirements-llm.txt
 # Llama 3.1 jest modelem z ograniczonym dostępem: zaakceptuj licencję na HF. Token z
 # `hf auth login` (krok 2) jest wspólny dla obu środowisk, jeśli HF_HOME jest ten sam.
-PYTHONPATH=$PWD /workspace/venv-llm/bin/python scripts/run_matrix.py --groups llm
+PYTHONPATH=$PWD /workspace/venv-llm/bin/python scripts/run_matrix.py --groups llm   # Llama: --groups extra_llm
 ```
 
 Domyślne modele: `Qwen/Qwen3-8B` (bez trybu „thinking”) i
