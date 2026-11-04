@@ -1,0 +1,6 @@
+# LLM baseline: the same model with the prompting setup of Sun et al. (2024)
+# (their "Explanation" instruction, 5 demonstrations per event type selected with BM25,
+# their answer format and parsing; no triggers are asked for). See phee/llm/authors_prompt.py.
+inherit: qwen3_8b.yaml
+prompt_style: authors
+shots: [0, 5]

@@ -24,7 +24,8 @@ groups:
     seeds: [1]
     fixed_seeds: true
     configs:
-      - configs/llm/qwen3_8b.yaml
+      - configs/llm/qwen3_8b_authors_prompt.yaml   # baseline: the authors' prompt (Sun et al. 2024)
+      - configs/llm/qwen3_8b.yaml                  # improved: our prompt
 
   # ---- optional: remaining variants (not part of the main plan) ----
   extra_seq_heads:

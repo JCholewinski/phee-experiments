@@ -18,6 +18,7 @@ Greedy decoding (temperature 0), so a single run is enough (the seed is ignored)
 
 from phee.experiment import RunRecorder, load_splits
 from phee.llm.bm25 import BM25
+from phee.llm import authors_prompt
 from phee.llm.prompts import extract_json, messages, to_predictions
 from phee.utils import GpuMemory, Timer, log
 
@@ -53,12 +54,12 @@ def _reserved_gpu_memory_gb(model_config):
     return None
 
 
-def _prompts(tokenizer, samples, demonstrations, chat_template_kwargs):
+def _prompts(tokenizer, samples, demonstrations, chat_template_kwargs, build_messages=messages):
     prompts = []
     for sample, demos in zip(samples, demonstrations):
         prompts.append(
             tokenizer.apply_chat_template(
-                messages(sample, demos),
+                build_messages(sample, demos),
                 tokenize=False,
                 add_generation_prompt=True,
                 **(chat_template_kwargs or {}),
@@ -150,7 +151,15 @@ def run(config, seed, run_dir):
         backend = backend_class(model_config, max_new_tokens)
     weights_gb = _model_weights_gb(model_config["name"])
     reserved_gb = _reserved_gpu_memory_gb(model_config)
-    retriever = BM25([sample["context"] for sample in data["train"]])
+    # prompt_style: own (our prompt, BM25 over the whole training set) or authors
+    # (Sun et al. 2024: their instruction, k demonstrations per event type, their parsing)
+    authors_style = config.get("prompt_style", "own") == "authors"
+    if authors_style:
+        retriever = authors_prompt.TypeRetriever(data["train"])
+        build_messages, parse = authors_prompt.messages, lambda text: authors_prompt.to_predictions(authors_prompt.extract_events(text))
+    else:
+        retriever = BM25([sample["context"] for sample in data["train"]])
+        build_messages, parse = messages, lambda text: to_predictions(extract_json(text))
 
     for shots in shots_list:
         for split in splits:
@@ -158,7 +167,10 @@ def run(config, seed, run_dir):
             log(f"llm: {shots}-shot on {split} ({len(samples)} sentences)")
             # timed from raw text: demonstration retrieval, prompt building and generation
             with GpuMemory() as memory, Timer() as timer:
-                if shots:
+                if shots and authors_style:
+                    # authors: `shots` demonstrations per event type, most similar first
+                    demonstrations = [retriever.demonstrations(sample, shots) for sample in samples]
+                elif shots:
                     # most similar demonstration last (closest to the query)
                     demonstrations = [
                         [data["train"][i] for i in reversed(retriever.top(sample["context"], shots))]
@@ -166,12 +178,13 @@ def run(config, seed, run_dir):
                     ]
                 else:
                     demonstrations = [[] for _ in samples]
-                prompts = _prompts(backend.tokenizer, samples, demonstrations, model_config.get("chat_template_kwargs"))
+                prompts = _prompts(backend.tokenizer, samples, demonstrations,
+                                   model_config.get("chat_template_kwargs"), build_messages)
                 texts, lengths = backend.generate(prompts)
             records = []
             invalid = 0
             for sample, text in zip(samples, texts):
-                predictions, valid = to_predictions(extract_json(text))
+                predictions, valid = parse(text)
                 invalid += 0 if valid else 1
                 records.append({"id": sample["id"], "pred": predictions, "raw": text, "valid_json": valid})
             prompt_tokens = [len(backend.tokenizer(prompt, add_special_tokens=False)["input_ids"]) for prompt in prompts]

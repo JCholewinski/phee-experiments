@@ -279,6 +279,13 @@ odpowiedzi; liczba takich wyjść jest zapisywana (`stage1_truncated_outputs`,
 
 ### LLM (`configs/llm/`)
 
+| Config | Opis |
+|---|---|
+| `qwen3_8b_authors_prompt` (baseline) | prompt Sun i in. (2024) z ich kodu: instrukcja „Explanation”, 5 przykładów na typ zdarzenia (BM25), ich format odpowiedzi i parsowanie; bez triggerów (oni o nie nie pytali), więc porównujemy argumenty |
+| `qwen3_8b` (wersja poprawiona) | własny prompt: definicje etykiet, schemat JSON z triggerem, 5 najbardziej podobnych przykładów (BM25) |
+| `qwen3_8b_pool50` (opcjonalnie) | jak wyżej, ale przykłady tylko z 50 losowych zdań treningowych |
+
+
 Prompt ze schematem i definicjami etykiet, odpowiedź w JSON; wariant 0-shot i 5-shot
 (przykłady z train dobierane przez BM25, jak u Sun i in. 2024). Dekodowanie zachłanne,
 jeden przebieg. Raportowany jest też odsetek odpowiedzi w złym formacie.
