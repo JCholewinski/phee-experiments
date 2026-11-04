@@ -12,12 +12,25 @@ from phee.io import write_json, write_jsonl
 
 
 def load_splits(config, splits=("train", "dev", "test")):
-    data_dir = Path(config.get("data", {}).get("dir", "data/phee2/processed"))
-    limit = config.get("data", {}).get("limit")
-    return {
+    """Data splits. `data.train_sample: {size: N, seed: S}` keeps N random training
+    sentences (low-resource experiments: the only labelled data a method may use, for
+    training or as the pool of few-shot demonstrations); dev and test stay whole."""
+    data_config = config.get("data", {})
+    data_dir = Path(data_config.get("dir", "data/phee2/processed"))
+    limit = data_config.get("limit")
+    data = {
         split: load_samples(data_dir / f"{split}.jsonl", limit=limit)
         for split in splits
     }
+    sample = data_config.get("train_sample")
+    if sample and "train" in data:
+        import random
+
+        size, seed = int(sample["size"]), int(sample.get("seed", 13))
+        if size < len(data["train"]):
+            chosen = random.Random(seed).sample(range(len(data["train"])), size)
+            data["train"] = [data["train"][i] for i in sorted(chosen)]
+    return data
 
 
 def early_stopping_dev(config, data):

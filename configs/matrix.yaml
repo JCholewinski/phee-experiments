@@ -49,3 +49,13 @@ groups:
     fixed_seeds: true
     configs:
       - configs/llm/llama31_8b.yaml
+  # low-resource check: only 50 random labelled training sentences (same 50 in both)
+  low_resource_llm:             # run in the vLLM environment
+    seeds: [1]
+    fixed_seeds: true
+    configs:
+      - configs/llm/qwen3_8b_pool50.yaml
+  low_resource_trained:
+    seeds: [1, 2, 3]
+    configs:
+      - configs/seq/own_crf_train50.yaml

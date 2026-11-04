@@ -1,0 +1,6 @@
+# Low-resource variant: few-shot demonstrations are retrieved (BM25) from only 50 random
+# training sentences instead of all 2898 (0-shot does not depend on the pool).
+inherit: qwen3_8b.yaml
+shots: [5]
+data:
+  train_sample: {size: 50, seed: 13}
