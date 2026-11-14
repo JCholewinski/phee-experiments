@@ -134,9 +134,11 @@ Punkty odniesienia: baseline extractive QA i generative QA nie zmieniły się od
 (test, seed 1: argumenty główne 55,0 i 72,1 EM-F1), więc powinny wyjść bardzo podobnie.
 Baseline SL ma teraz warstwę CRF (1. runda bez CRF: 63,2).
 
-Jeśli po trybie testowym zmieni się kod albo konfiguracja jakiejś metody, usuń jej
-katalogi z `results/` (np. `rm -r results/gqa__own_current_predicted`), żeby przebiegi z
-seedem 1 policzyły się od nowa.
+Zmiana konfiguracji po trybie testowym jest wykrywana automatycznie: przebieg, którego
+zapisany `config.json` różni się od obecnej konfiguracji, liczy się od nowa, a stary
+katalog trafia do `results/_replaced/` (dotyczy też wyników 1. rundy, jeśli są jeszcze w
+`results/` na maszynie). Jeśli zmieni się tylko kod metody, usuń jej katalogi z
+`results/` (np. `rm -r results/gqa__own_current_predicted`).
 
 ### 7. Wyniki końcowe (seedy 2 i 3)
 

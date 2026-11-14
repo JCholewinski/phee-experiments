@@ -6,10 +6,15 @@
 
 Finished runs (DONE file) are skipped, so the command can simply be started again
 after an interruption. A failed run is logged and the next one starts.
+A finished run whose saved config.json differs from the current config (the config file
+was changed after the run) is run again; the old run directory is moved to
+<output_dir>/_replaced/ first.
 """
 
 import argparse
+import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -18,15 +23,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from phee.io import load_config, read_yaml  # noqa: E402
+from phee.io import experiment_config, read_yaml  # noqa: E402
 
 
-def experiment_name(config_path):
-    config = load_config(ROOT / config_path)
-    if config.get("name"):
-        return config["name"]
-    parts = Path(config_path).with_suffix("").parts
-    return "__".join(parts[1:] if parts[0] == "configs" else parts)
+def run_status(config_path, seed, output_dir, overrides):
+    """(experiment name, run dir, status): todo | done | changed (finished with a config
+    that differs from the current one)."""
+    config = experiment_config(config_path, seed, overrides, root=ROOT)
+    run_dir = ROOT / output_dir / config["name"] / f"seed{seed}"
+    if not (run_dir / "DONE").exists():
+        return config["name"], run_dir, "todo"
+    saved_path = run_dir / "config.json"
+    current = json.loads(json.dumps(config))
+    if saved_path.exists() and json.loads(saved_path.read_text(encoding="utf-8")) != current:
+        return config["name"], run_dir, "changed"
+    return config["name"], run_dir, "done"
 
 
 def main():
@@ -54,10 +65,8 @@ def main():
                 jobs.append((group, config_path, seed))
 
     for group, config_path, seed in jobs:
-        name = experiment_name(config_path)
-        done = (ROOT / args.output_dir / name / f"seed{seed}" / "DONE").exists()
-        status = "done" if done else "todo"
-        print(f"[{status}] {group:10s} {config_path:45s} seed {seed}")
+        _, _, status = run_status(config_path, seed, args.output_dir, args.set)
+        print(f"[{status:7s}] {group:10s} {config_path:45s} seed {seed}")
     if args.list:
         return
 
@@ -65,9 +74,14 @@ def main():
     env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
     failures = []
     for group, config_path, seed in jobs:
-        name = experiment_name(config_path)
-        if (ROOT / args.output_dir / name / f"seed{seed}" / "DONE").exists():
+        name, run_dir, status = run_status(config_path, seed, args.output_dir, args.set)
+        if status == "done":
             continue
+        if status == "changed":
+            backup = ROOT / args.output_dir / "_replaced" / name / f"seed{seed}-{time.strftime('%Y%m%d-%H%M%S')}"
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(run_dir), str(backup))
+            print(f"--- {name} seed {seed}: config changed since the run, old run moved to {backup}", flush=True)
         log_path = log_dir / f"{name}__seed{seed}.log"
         command = [
             sys.executable, str(ROOT / "scripts" / "run_experiment.py"),

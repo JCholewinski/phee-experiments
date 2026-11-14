@@ -16,11 +16,9 @@ import sys
 import traceback
 from pathlib import Path
 
-import yaml
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from phee.io import load_config  # noqa: E402
+from phee.io import experiment_config  # noqa: E402
 from phee.utils import log  # noqa: E402
 
 RUNNERS = {
@@ -29,24 +27,6 @@ RUNNERS = {
     "gqa": "phee.gqa.runner",
     "llm": "phee.llm.runner",
 }
-
-
-def apply_override(config, assignment):
-    key, _, raw = assignment.partition("=")
-    value = yaml.safe_load(raw)
-    if isinstance(value, str):
-        # YAML reads "1e-3" (no dot) as a string
-        for cast in (int, float):
-            try:
-                value = cast(value)
-                break
-            except ValueError:
-                continue
-    node = config
-    parts = key.split(".")
-    for part in parts[:-1]:
-        node = node.setdefault(part, {})
-    node[parts[-1]] = value
 
 
 def main():
@@ -59,18 +39,7 @@ def main():
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
 
-    config_path = Path(args.config)
-    config = load_config(config_path)
-    for assignment in args.set:
-        apply_override(config, assignment)
-    sample = (config.get("data") or {}).get("train_sample")
-    if sample and sample.get("seed") == "run":
-        sample["seed"] = args.seed   # a different random subset of train for every seed
-    if args.name:
-        config["name"] = args.name
-    elif not config.get("name"):
-        parts = config_path.with_suffix("").parts
-        config["name"] = "__".join(parts[1:] if parts[0] == "configs" else parts)
+    config = experiment_config(args.config, args.seed, args.set, args.name)
 
     run_dir = Path(args.output_dir) / config["name"] / f"seed{args.seed}"
     if (run_dir / "DONE").exists() and not args.force:

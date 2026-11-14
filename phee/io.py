@@ -59,3 +59,41 @@ def load_config(path):
         parent_config = load_config(path.parent / parent)
         config = deep_update(parent_config, config)
     return config
+
+
+def apply_override(config, assignment):
+    """`key.sub=value` (value parsed as YAML), e.g. training.max_epochs=1."""
+    key, _, raw = assignment.partition("=")
+    value = yaml.safe_load(raw)
+    if isinstance(value, str):
+        # YAML reads "1e-3" (no dot) as a string
+        for cast in (int, float):
+            try:
+                value = cast(value)
+                break
+            except ValueError:
+                continue
+    node = config
+    parts = key.split(".")
+    for part in parts[:-1]:
+        node = node.setdefault(part, {})
+    node[parts[-1]] = value
+
+
+def experiment_config(config_path, seed, overrides=(), name=None, root=None):
+    """The config of one run exactly as run_experiment.py uses it (and saves it in
+    config.json): inheritance, --set overrides, the experiment name from the config
+    path (relative, e.g. configs/seq/own_crf.yaml; read from `root` if given),
+    `data.train_sample.seed: run` replaced by the run seed."""
+    config = load_config(Path(root) / config_path if root else config_path)
+    for assignment in overrides:
+        apply_override(config, assignment)
+    sample = (config.get("data") or {}).get("train_sample")
+    if sample and sample.get("seed") == "run":
+        sample["seed"] = seed   # a different random subset of train for every seed
+    if name:
+        config["name"] = name
+    elif not config.get("name"):
+        parts = Path(config_path).with_suffix("").parts
+        config["name"] = "__".join(parts[1:] if parts[0] == "configs" else parts)
+    return config
