@@ -1,11 +1,12 @@
 # Own sequence labeling: two models (main level, sub-arguments), BIO tags,
-# multi-event sentences used once with the spans of all events.
+# multi-event sentences used once with the spans of all events. Same encoder and
+# training settings as the baseline (BioBERT v1.1, lr 5e-5, batch 32), so that the
+# difference comes from the construction of the method.
 inherit: ../base.yaml
 method: seq
 scheme: two_level
 model:
-  name: thomas-sounack/BioClinical-ModernBERT-base   # recommended by its authors over Bio-ModernBERT
-  compile: false   # ModernBERT's built-in torch.compile (needs a C compiler on the machine)
+  name: dmis-lab/biobert-base-cased-v1.1
   dropout: 0.1
   max_length: 512
   mlp_hidden_size: 256
@@ -14,5 +15,5 @@ model:
   crf_constrained: true
 training:
   learning_rate: 5.0e-5
-  batch_size: 16
+  batch_size: 32
 decodings: [argmax, viterbi]    # every decoding is evaluated on the same trained model

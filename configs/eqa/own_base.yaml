@@ -1,13 +1,13 @@
 # Own extractive QA pipeline: event type classifier -> trigger QA -> main-argument QA
-# -> sub-argument QA (the existing implementation), BioClinical ModernBERT.
+# -> sub-argument QA. Same encoder and training settings as the baseline (BioBERT v1.1,
+# lr 5e-5, batch 16), so that the difference comes from the construction of the method.
 inherit: ../base.yaml
 method: eqa
 templates: current
 train_inputs: predicted
 trigger_mode: question   # event type classifier + one trigger question per type
 model:
-  name: thomas-sounack/BioClinical-ModernBERT-base   # recommended by its authors over Bio-ModernBERT
-  compile: false   # ModernBERT's built-in torch.compile (needs a C compiler on the machine)
+  name: dmis-lab/biobert-base-cased-v1.1
   max_length: 384
   stride: 128
 event_type: {threshold: 0.5, force_one: true, max_length: 256}

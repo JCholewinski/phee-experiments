@@ -45,123 +45,121 @@ legacy/                  poprzednia implementacja
 
 ## Uruchomienie na vast.ai krok po kroku
 
+Plan: dla każdej metody dwie wersje na **tym samym modelu** (baseline autorów i wersja
+rozwinięta) oraz jeden dodatkowy test LLM (przykłady tylko z 50 oznaczonych zdań).
+Najpierw **tryb testowy** (seed 1 każdego przebiegu), sprawdzenie wyników, potem
+**wyniki końcowe** (seedy 2 i 3; przebiegi z seedem 1 są wykorzystane ponownie).
+
 ### 1. Maszyna
 
 - GPU 24 GB (RTX 3090 / 4090 / 5090). Dla **RTX 5090 obraz musi mieć CUDA ≥ 12.8**
   i PyTorch ≥ 2.7, np. `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`.
 - Dysk: ok. 80 GB (modele z Hugging Face, cache, wyniki).
-- Dla wygody ustaw cache Hugging Face na dysku z miejscem: `export HF_HOME=/workspace/hf`.
+- **Cały plan na tej samej karcie** (tryb testowy i końcowy), inaczej czasy i koszty nie
+  są porównywalne; tabele ostrzegają, jeśli przebiegi pochodzą z różnych GPU.
+- Zanotuj cenę instancji (USD/h, widoczna na vast.ai): podajesz ją jako `GPU_PRICE`.
 
-### 2. Kod i środowisko treningowe
+### 2. Kod i środowiska
 
 ```bash
 cd /workspace
 git clone https://github.com/JCholewinski/phee-experiments.git
 cd phee-experiments
 git checkout experiments-v2
-bash scripts/vast/setup.sh        # instaluje zależności i uruchamia testy; z --llm także venv z vLLM
+bash scripts/vast/setup.sh --llm   # zależności + testy; --llm: osobny venv z vLLM (/workspace/venv-llm)
+source ~/.bashrc
 export HF_HOME=/workspace/hf PYTHONPATH=$PWD
 ```
 
-(Ręcznie: `pip install -r requirements.txt`, `export PYTHONPATH=$PWD`.)
-
-Dane są już w repozytorium w postaci po konwersji. Gdybyś chciał je wygenerować od nowa:
-`python scripts/prepare_data.py`.
-
-**Dostęp do T5Gemma**: modele `google/t5gemma-*` wymagają akceptacji licencji Gemma na
-stronie modelu w Hugging Face (raz, na koncie). Potem zaloguj się tokenem na maszynie:
-
-```bash
-python -c "from huggingface_hub import login; login()"   # albo: hf auth login
-```
-
-Pozostałe modele (BioBERT, BioClinical ModernBERT, SciFive) są dostępne bez logowania.
+vLLM instaluje własne wersje torch i transformers, dlatego część LLM ma osobny venv;
+skrypty same wybierają właściwe środowisko. Wszystkie modele planu (BioBERT, SciFive,
+Qwen3-8B) są dostępne bez logowania do Hugging Face. Dane są już w repozytorium po
+konwersji (od nowa: `python scripts/prepare_data.py`).
 
 ### 3. Testy (opcjonalnie, CPU wystarczy)
 
 Testy logiki niezależnej od modeli (ewaluacja, schematy etykiet, parsery, CRF i Viterbi
-porównane z pełnym przeglądem ścieżek, ograniczone dekodowanie na prawdziwych tokenizerach):
+porównane z pełnym przeglądem ścieżek, ograniczone dekodowanie na tokenizerach):
+`python -m pytest tests -q` (uruchamia je też `setup.sh`).
+
+Test całego pipeline'u na małych, losowych modelach (kilka minut, wyniki bez znaczenia):
 
 ```bash
-pip install pytest
-python -m pytest tests -q
-```
-
-Test całego pipeline'u na małych, losowych modelach (kilka minut): sprawdza, czy wszystkie
-warianty przechodzą trening, early stopping, predykcję i ewaluację. Wyniki są bez znaczenia.
-
-```bash
-pip install tokenizers sentencepiece
 python scripts/smoke/make_tiny_models.py
 python scripts/smoke/run_smoke.py
 ```
 
-### 4. Szybki test na prawdziwych modelach (GPU)
-
-Uruchom po jednym przebiegu każdej metody na 200 zdaniach i 1 epoce. Pozwala sprawdzić,
-czy modele się pobierają i działają na GPU, oraz ile potrwa epoka na pełnych danych:
+### 4. Szybki test na prawdziwych modelach (ok. 20–30 min)
 
 ```bash
-bash scripts/vast/quick_check.sh
+nohup bash scripts/vast/quick_check.sh > quick.log 2>&1 &
+tail -f quick.log
 ```
 
-Na końcu skrypt wypisuje dla każdego etapu czas jednej epoki przeliczony na pełne dane
-(trening i ocena na dev) oraz szczytową pamięć GPU. Wyniki trafiają do `results_quick/`
-(oddzielnie od właściwych wyników, wyniki jakości są tu bez znaczenia).
+Po jednym krótkim przebiegu każdej metody planu (200 zdań, 1 epoka; LLM: 20 zdań, 0- i
+5-shot). Sprawdza, czy modele się pobierają i działają na GPU; na końcu wypisuje czas
+epoki przeliczony na pełne dane, pamięć GPU i czas LLM na zdanie. Wyniki trafiają do
+`results_quick/` (ich jakość jest bez znaczenia).
 
-### 5. Eksperymenty
-
-Plan główny: dla każdej metody dwie wersje, baseline autorów (grupa `baselines`) i wersja
-poprawiona (grupa `improved`: SL z CRF, extractive QA i generative QA w wariancie
-bazowym). Najpierw tryb testowy na seedzie 1 (z LLM), potem seedy 2 i 3:
+### 5. Tryb testowy (seed 1)
 
 ```bash
-# tryb testowy: 6 przebiegów + LLM (Qwen3-8B, 0- i 5-shot)
-nohup sh -c 'python scripts/run_matrix.py --groups baselines improved --seeds 1; /workspace/venv-llm/bin/python scripts/run_matrix.py --groups llm' > matrix.log 2>&1 &
-# wyniki końcowe: pozostałe seedy (przebiegi z seedem 1 się liczą, jeśli kod się nie zmienił)
-nohup python scripts/run_matrix.py --groups baselines improved --seeds 2 3 > matrix2.log 2>&1 &
-tail -f matrix.log
-python scripts/run_matrix.py --groups baselines improved llm --list   # co zrobione, co zostało
+GPU_PRICE=0.17 nohup bash scripts/vast/run_plan.sh test > plan_test.log 2>&1 &
+tail -f plan_test.log
 ```
+
+`GPU_PRICE` to cena Twojej instancji w USD/h. Kolejność: część LLM (baseline z promptem
+Sun i in., wersja rozwinięta, test z 50 zdaniami), potem metody trenowane (grupy
+`baselines` i `improved`), na końcu tabele. Orientacyjnie na RTX 3090 ok. 5–6 h.
+
+| Grupa (`configs/matrix.yaml`) | Przebiegi |
+|---|---|
+| `llm` | `qwen3_8b_authors_prompt` (baseline), `qwen3_8b` (rozwinięta): 0- i 5-shot w jednym przebiegu, deterministyczne, tylko seed 1 |
+| `llm_pool50` | `qwen3_8b_pool50`: 5-shot, przykłady z 50 losowych zdań (inne 50 dla każdego seeda) |
+| `baselines` | `seq/authors_baseline`, `eqa/authors_baseline`, `gqa/authors_baseline` |
+| `improved` | `seq/own_crf`, `eqa/own_current_predicted`, `gqa/own_current_predicted` |
+
+### 6. Sprawdzenie wyników trybu testowego
+
+W `results/tables/`:
+
+- `comparison_test.md`: dla każdej metody baseline → wersja rozwinięta (trigger, argumenty
+  główne, subargumenty, zdania z kilkoma zdarzeniami, koszt) oraz test z 50 zdaniami;
+- `main_test.md`: wszystkie warianty, czasy, koszt przebiegu w USD, pamięć GPU;
+- `subsets_test.md`, `labels_test.md`: zdania z jednym / kilkoma zdarzeniami, każda etykieta;
+- `checks.md`: na co zwrócić uwagę (nieudane przebiegi, etap najlepszy w ostatniej
+  epoce, bardzo niskie wyniki, odpowiedzi LLM w złym formacie, ucięte generowanie).
+
+Punkty odniesienia: baseline extractive QA i generative QA nie zmieniły się od 1. rundy
+(test, seed 1: argumenty główne 55,0 i 72,1 EM-F1), więc powinny wyjść bardzo podobnie.
+Baseline SL ma teraz warstwę CRF (1. runda bez CRF: 63,2).
+
+Jeśli po trybie testowym zmieni się kod albo konfiguracja jakiejś metody, usuń jej
+katalogi z `results/` (np. `rm -r results/gqa__own_current_predicted`), żeby przebiegi z
+seedem 1 policzyły się od nowa.
+
+### 7. Wyniki końcowe (seedy 2 i 3)
+
+```bash
+GPU_PRICE=0.17 nohup bash scripts/vast/run_plan.sh final > plan_final.log 2>&1 &
+```
+
+Uruchamia seedy 2 i 3 metod trenowanych i testu z 50 zdaniami (LLM z całą pulą jest
+deterministyczny i liczony raz), potem tabele ze średnią ± odchyleniem z 3 seedów.
+Orientacyjnie ok. 9–10 h na RTX 3090.
+
+- Skończony przebieg ma plik `DONE` i jest pomijany, więc po przerwaniu (np. restart
+  instancji) wystarczy uruchomić to samo polecenie ponownie.
+- Nieudany przebieg ma plik `FAILED` z tracebackiem, a plan przechodzi do następnego.
+- Log każdego przebiegu: `results/logs/<eksperyment>__seed<N>.log`; stan planu:
+  `python scripts/run_matrix.py --groups llm llm_pool50 baselines improved --seeds 1 2 3 --list`.
+- Tabele można przeliczyć w każdej chwili: `python scripts/aggregate_results.py --gpu_price 0.17`.
+- Pobranie wyników na swój komputer: `tar czf results.tgz results` i np. `scp` albo
+  pobranie pliku w Jupyterze vast.ai.
 
 Pozostałe zaimplementowane warianty (inne głowice SL, szablony i trening na danych
 referencyjnych w QA, Llama 3.1) są w grupach `extra_*` w `configs/matrix.yaml` i nie są
-uruchamiane domyślnie. Jeśli po trybie testowym zmieni się kod jakiejś metody, usuń jej
-katalogi z `results/`, żeby przebiegi z seedem 1 policzyły się od nowa.
-
-- Przebiegi trwają różnie: SL kilka minut, extractive QA kilkadziesiąt minut, generative QA
-  najdłużej (generowanie na dev po każdej epoce). Dokładny czas epoki widać w szybkim
-  teście z punktu 4. Żeby skrócić early stopping w generative QA, można oceniać po każdej
-  epoce tylko część dev: `--set early_stopping_dev_limit=300` (końcowe wyniki na dev i
-  teście są zawsze liczone na całych zbiorach).
-- Każdy przebieg działa w osobnym procesie; log: `results/logs/<eksperyment>__seed<N>.log`.
-- Skończony przebieg ma plik `DONE` i jest pomijany, więc po przerwaniu (np. restart
-  instancji) wystarczy uruchomić to samo polecenie ponownie.
-- Nieudany przebieg ma plik `FAILED` z tracebackiem, a matrix przechodzi do następnego.
-
-### 6. Część LLM (osobne środowisko)
-
-vLLM instaluje własne wersje torch i transformers, dlatego potrzebny jest osobny venv:
-
-```bash
-python -m venv /workspace/venv-llm
-/workspace/venv-llm/bin/pip install -r requirements-llm.txt
-# Llama 3.1 jest modelem z ograniczonym dostępem: zaakceptuj licencję na HF. Token z
-# `hf auth login` (krok 2) jest wspólny dla obu środowisk, jeśli HF_HOME jest ten sam.
-PYTHONPATH=$PWD /workspace/venv-llm/bin/python scripts/run_matrix.py --groups llm   # Llama: --groups extra_llm
-```
-
-Domyślne modele: `Qwen/Qwen3-8B` (bez trybu „thinking”) i
-`meta-llama/Llama-3.1-8B-Instruct`. Oba mieszczą się w 24 GB w bf16. Inne modele
-dodajesz kopiując `configs/llm/qwen3_8b.yaml` i dopisując go w `configs/matrix.yaml`
-(większe modele: `model.quantization: fp8` lub gotowe wersje AWQ).
-
-### 7. Tabele
-
-```bash
-python scripts/aggregate_results.py      # results/tables/*.md, *.csv, *.png
-python scripts/tag_ceiling.py            # górne granice schematów SL
-```
+częścią planu, np. `python scripts/run_matrix.py --groups extra_seq_heads --seeds 1`.
 
 ## Dane
 
@@ -205,30 +203,30 @@ Wspólna procedura treningu (`phee/training.py`): AdamW, rozgrzewka 10%, liniowy
 LR, bf16, do 20 epok, **early stopping po 2 ocenach bez poprawy** wyniku F1 na dev
 (każdy etap ma własną miarę na dev), przywrócenie najlepszego checkpointu, 3 seedy.
 
-Modele:
+Modele: **ten sam model w obu wersjach metody**, żeby różnica wynikała ze zmian w
+konstrukcji metody, a nie z lepszego modelu; ustawienia treningu (LR, batch) też są takie
+same jak w baseline.
 
-| Metoda | Baseline (jak autorzy) | Własne warianty |
-|---|---|---|
-| Sequence labeling | `dmis-lab/biobert-base-cased-v1.1` | `thomas-sounack/BioClinical-ModernBERT-base` |
-| Extractive QA | `dmis-lab/biobert-base-cased-v1.1` | `thomas-sounack/BioClinical-ModernBERT-base` |
-| Generative QA | `razent/SciFive-base-PMC` | `google/t5gemma-b-b-ul2` |
-| LLM | – | `Qwen/Qwen3-8B`, `meta-llama/Llama-3.1-8B-Instruct` |
+| Metoda | Model (baseline i wersja rozwinięta) |
+|---|---|
+| Sequence labeling | `dmis-lab/biobert-base-cased-v1.1` |
+| Extractive QA | `dmis-lab/biobert-base-cased-v1.1` |
+| Generative QA | `razent/SciFive-base-PMC` |
+| LLM | `Qwen/Qwen3-8B` (opcjonalnie `meta-llama/Llama-3.1-8B-Instruct`, grupa `extra_llm`) |
 
-BioClinical ModernBERT zamiast Bio-ModernBERT: autorzy obu modeli (Sounack i in. 2025)
-piszą, że wariant tylko biomedyczny (Bio-ModernBERT) konsekwentnie wypadał gorzej w ich
-ewaluacjach, a BioClinical ModernBERT był w fazie 1 trenowany także na PubMed i PMC.
-Zmiana modelu to jedna linijka (`model.name`) w `configs/seq/own_base.yaml` i
-`configs/eqa/own_base.yaml`.
+W 1. rundzie wersje rozwinięte używały BioClinical ModernBERT i T5Gemma; to mieszało
+efekt zmian z efektem modelu, dlatego od 2. rundy model jest wspólny.
 
 ### Sequence labeling (`configs/seq/`)
 
 | Config | Opis |
 |---|---|
-| `authors_baseline` | jak u autorów: jeden model, etykiety złożone (argument + subargument), schemat IO, zdanie kopiowane osobno dla każdego zdarzenia, BioBERT, głowica liniowa |
-| `own_linear` / `own_mlp` / `own_crf` | Twoja konstrukcja: dwa modele (poziom główny i subargumenty), BIO, zdanie z kilkoma zdarzeniami użyte raz, BioClinical ModernBERT; głowice: liniowa, MLP (256, GELU), CRF z **uczonymi** przejściami (NLL CRF, ograniczenia BIO) |
+| `authors_baseline` | jak u autorów: jeden model, etykiety złożone (argument + subargument), schemat IO, zdanie kopiowane osobno dla każdego zdarzenia, warstwa CRF z uczonymi przejściami (dekodowanie Viterbi), BioBERT |
+| `own_crf` (wersja rozwinięta) | dwa modele (poziom główny i subargumenty), BIO, zdanie z kilkoma zdarzeniami użyte raz, CRF z uczonymi przejściami i **zakazem przejść niemożliwych w BIO** w treningu i dekodowaniu (Viterbi), BioBERT |
+| `own_linear` / `own_mlp` (extra) | ta sama konstrukcja z głowicą liniową / MLP (256, GELU), dekodowanie argmax i Viterbi z ograniczeniami BIO |
 
-Dekodowanie (`argmax`, `viterbi` z ograniczeniami BIO) jest liczone na tym samym
-wytrenowanym modelu, więc każdy przebieg daje oba warianty. Spany nakładające się na span
+Dekodowanie (`argmax`, `viterbi`) jest liczone na tym samym wytrenowanym modelu, więc
+przebieg z kilkoma dekodowaniami daje kilka wariantów. Spany nakładające się na span
 o wyższym priorytecie są pomijane w całości (trigger > TREATMENT > EFFECT > SUBJECT,
 dla subargumentów częstsza etykieta wygrywa).
 
@@ -244,7 +242,7 @@ trigger. Klasyfikatora typu zdarzenia wtedy nie ma.
 
 | Config | Triggery | Szablony | Trening etapów 3–4 |
 |---|---|---|---|
-| `authors_baseline` | tagger słów (EEQA) | autorów | na danych referencyjnych, BioBERT |
+| `authors_baseline` | tagger słów (EEQA) | autorów | na danych referencyjnych |
 | `own_current_predicted` (bazowy) | pytanie | obecne | na predykcjach poprzedniego etapu |
 | `own_current_gold` | pytanie | obecne | na danych referencyjnych |
 | `own_authors_predicted` | pytanie | autorów | na predykcjach |
@@ -261,15 +259,17 @@ nie ma.
 ### Generative QA (`configs/gqa/`)
 
 Etap 1 generuje zdarzenia (trigger + argumenty główne), etap 2 odpowiada na pytania o
-subargumenty. Dekodowanie `free` i `constrained` jest liczone na tych samych modelach.
+subargumenty. Dekodowanie `free` i `constrained` jest liczone na tych samych modelach;
+wersja rozwinięta to wariant `constrained`. Wszystkie warianty: SciFive-base-PMC, LR 5e-4
+(etap 1) / 5e-5 (etap 2), efektywny batch 16, beam 3.
 
-| Config | Format celu | Szablony etapu 2 | Trening etapu 2 | Model |
-|---|---|---|---|---|
-| `authors_baseline` | autorów | autorów | referencyjne | SciFive-base-PMC |
-| `own_current_predicted` (bazowy) | obecny | obecne | predykcje etapu 1 | T5Gemma b-b UL2 |
-| `own_current_gold` | obecny | obecne | referencyjne | T5Gemma |
-| `own_authors_predicted` | obecny | autorów | predykcje | T5Gemma |
-| `own_definitions_predicted` | obecny | obecne + definicje | predykcje | T5Gemma |
+| Config | Format celu | Szablony etapu 2 | Trening etapu 2 |
+|---|---|---|---|
+| `authors_baseline` | autorów | autorów | referencyjne |
+| `own_current_predicted` (wersja rozwinięta) | własny | obecne (wskazują argument) | predykcje etapu 1 |
+| `own_current_gold` | własny | obecne | referencyjne |
+| `own_authors_predicted` | własny | autorów | predykcje |
+| `own_definitions_predicted` | własny | obecne + definicje | predykcje |
 
 Dekodowanie ograniczone: każdy generowany fragment musi być fragmentem zdania (między
 granicami słów), a struktura wyjścia musi pasować do gramatyki znaczników (`phee/gqa/constrained.py`).
@@ -281,14 +281,16 @@ odpowiedzi; liczba takich wyjść jest zapisywana (`stage1_truncated_outputs`,
 
 | Config | Opis |
 |---|---|
-| `qwen3_8b_authors_prompt` (baseline) | prompt Sun i in. (2024) z ich kodu: instrukcja „Explanation”, 5 przykładów na typ zdarzenia (BM25), ich format odpowiedzi i parsowanie; bez triggerów (oni o nie nie pytali), więc porównujemy argumenty |
-| `qwen3_8b` (wersja poprawiona) | własny prompt: definicje etykiet, schemat JSON z triggerem, 5 najbardziej podobnych przykładów (BM25) |
-| `qwen3_8b_pool50` (opcjonalnie) | jak wyżej, ale przykłady tylko z 50 losowych zdań treningowych |
+| `qwen3_8b_authors_prompt` (baseline) | prompt Sun i in. (2024) z ich kodu: instrukcja „Explanation” (krótki opis każdego pola), ich format odpowiedzi i parsowanie; bez triggerów (oni o nie nie pytali), więc trigger F1 nie jest raportowany |
+| `qwen3_8b` (wersja rozwinięta) | własny prompt: definicje argumentów i triggera, reguły oznaczania, odpowiedź JSON z triggerem |
+| `qwen3_8b_pool50` (test dodatkowy) | jak `qwen3_8b`, 5-shot, ale przykłady wybierane tylko z 50 losowych zdań treningowych (inne 50 dla każdego seeda) |
 
-
-Prompt ze schematem i definicjami etykiet, odpowiedź w JSON; wariant 0-shot i 5-shot
-(przykłady z train dobierane przez BM25, jak u Sun i in. 2024). Dekodowanie zachłanne,
-jeden przebieg. Raportowany jest też odsetek odpowiedzi w złym formacie.
+Przykłady są dobierane **tak samo w obu wersjach**, jak u Sun i in. (2024): BM25,
+5 najbardziej podobnych zdań z ADE i 5 z PTE (`demonstrations: per_type` w
+`configs/llm/base.yaml`; `top` = 5 najbardziej podobnych zdań dowolnego typu). Dzięki temu
+wersje różnią się tylko poleceniem. Warianty 0-shot i 5-shot (5 na typ) w jednym
+przebiegu, dekodowanie zachłanne, więc jeden przebieg wystarcza. Raportowany jest też
+odsetek odpowiedzi w złym formacie.
 
 ## Wyniki i analizy
 
@@ -302,16 +304,18 @@ results/<eksperyment>/seed<N>/
 results/tables/           wyniki zagregowane (średnia ± odchylenie po seedach)
 ```
 
-Koszt: czas treningu (bez ewaluacji na dev, osobno czas ewaluacji), czas inferencji na
-zdanie na zbiorze testowym (wszystkie etapy pipeline'u), szczytowa pamięć GPU.
+Koszt: czas treningu (bez ewaluacji na dev, osobno czas ewaluacji), czas całego przebiegu
+(`run_seconds`: wczytanie modelu, trening, ewaluacje, predykcje wszystkich wariantów) i
+jego koszt w USD (czas × `--gpu_price`), czas inferencji na zdanie na zbiorze testowym
+(wszystkie etapy pipeline'u), szczytowa pamięć GPU.
 
 ## Różnice względem artykułu PHEE i ograniczenia
 
 - **Metryka**: bez typu zdarzenia przy argumentach i na unikalnych parach (autorzy: z typem,
   każde wystąpienie osobno); dla SL autorów usuwa to karę za ostatni trigger w zdaniu.
 - **Dane**: poprawiona wersja z 2024 r.; bez `Combination.Drug`.
-- **Baseline SL**: bez frameworku ACE (autorzy łączyli embeddingi kilku modeli),
-  BioBERT z głowicą liniową.
+- **Baseline SL**: bez frameworku ACE (autorzy łączyli wektory BERT i BioBERT), jeden
+  BioBERT z warstwą CRF, jak w końcowym systemie autorów.
 - **Baseline extractive QA**: tagger triggerów jak w EEQA, ale bez stałego zapytania
   „null” na wejściu i z pełną tokenizacją słów (autorzy podawali modelowi tylko pierwszy
   sub-token każdego słowa); bez znacznika pozycji triggera w pytaniach o argumenty.

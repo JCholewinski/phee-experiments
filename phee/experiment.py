@@ -70,6 +70,7 @@ class RunRecorder:
         self.seed = seed
         self.stages = []
         self.variants = {}
+        self.start_time = time.time()   # wall clock of the whole run (cost in GPU hours)
         write_json(config, self.run_dir / "config.json")
 
     def add_stage(self, report):
@@ -117,6 +118,8 @@ class RunRecorder:
                 ],
             },
             "variants": self.variants,
+            # whole run: loading, training, dev evaluations, prediction of every variant
+            "run_seconds": time.time() - self.start_time,
         }
         if extra:
             summary.update(extra)

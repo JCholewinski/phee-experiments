@@ -11,9 +11,14 @@ Config (configs/llm/*.yaml):
     quantization: null       # e.g. fp8 / awq for larger models
     chat_template_kwargs: {enable_thinking: false}   # passed to the chat template
   shots: [0, 5]              # every value is one variant (BM25 demonstrations from train)
+  demonstrations: per_type   # per_type: `shots` most similar sentences with an ADE and
+                             # `shots` with a PTE (Sun et al. 2024, BM25-Type; used by both
+                             # prompts, so they see the same examples); top: `shots` most
+                             # similar sentences of any type
   max_new_tokens: 1024
 
-Greedy decoding (temperature 0), so a single run is enough (the seed is ignored).
+Greedy decoding (temperature 0), so a single run is enough: the seed only matters when
+it chooses the pool of demonstrations (`data.train_sample.seed: run`).
 """
 
 from phee.experiment import RunRecorder, load_splits
@@ -151,15 +156,23 @@ def run(config, seed, run_dir):
         backend = backend_class(model_config, max_new_tokens)
     weights_gb = _model_weights_gb(model_config["name"])
     reserved_gb = _reserved_gpu_memory_gb(model_config)
-    # prompt_style: own (our prompt, BM25 over the whole training set) or authors
-    # (Sun et al. 2024: their instruction, k demonstrations per event type, their parsing)
+    # prompt_style: own (our prompt and answer format) or authors (Sun et al. 2024: their
+    # instruction, answer format and parsing). The demonstrations are chosen the same way
+    # for both prompts (`demonstrations`), so the two versions differ only in the prompt.
     authors_style = config.get("prompt_style", "own") == "authors"
     if authors_style:
-        retriever = authors_prompt.TypeRetriever(data["train"])
         build_messages, parse = authors_prompt.messages, lambda text: authors_prompt.to_predictions(authors_prompt.extract_events(text))
     else:
-        retriever = BM25([sample["context"] for sample in data["train"]])
         build_messages, parse = messages, lambda text: to_predictions(extract_json(text))
+    selection = config.get("demonstrations", "per_type")
+    if selection == "per_type":
+        retriever = authors_prompt.TypeRetriever(data["train"])
+    elif selection == "top":
+        retriever = BM25([sample["context"] for sample in data["train"]])
+    else:
+        raise ValueError(f"Unknown demonstrations: {selection}")
+    log(f"llm: prompt {'authors' if authors_style else 'own'}, demonstrations {selection}, "
+        f"pool of {len(data['train'])} training sentences")
 
     for shots in shots_list:
         for split in splits:
@@ -167,8 +180,8 @@ def run(config, seed, run_dir):
             log(f"llm: {shots}-shot on {split} ({len(samples)} sentences)")
             # timed from raw text: demonstration retrieval, prompt building and generation
             with GpuMemory() as memory, Timer() as timer:
-                if shots and authors_style:
-                    # authors: `shots` demonstrations per event type, most similar first
+                if shots and selection == "per_type":
+                    # `shots` demonstrations per event type, most similar first (authors)
                     demonstrations = [retriever.demonstrations(sample, shots) for sample in samples]
                 elif shots:
                     # most similar demonstration last (closest to the query)

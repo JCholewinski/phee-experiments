@@ -1,4 +1,7 @@
-# Own generative QA: existing target format and stage-2 questions, T5Gemma (UL2, base).
+# Own generative QA: own target format and stage-2 questions, stage 2 trained on the
+# predictions of stage 1, constrained decoding. Same model and training settings as the
+# baseline (SciFive-base-PMC, lr 5e-4 / 5e-5, effective batch 16, beam 3), so that the
+# difference comes from the construction of the method.
 inherit: ../base.yaml
 method: gqa
 target_format: own
@@ -6,8 +9,7 @@ templates: current
 train_inputs: predicted
 decodings: [free, constrained]  # constrained decoding is applied to the same trained models
 model:
-  name: google/t5gemma-b-b-ul2
-  attn_implementation: eager    # Gemma 2 attention uses logit soft-capping
+  name: razent/SciFive-base-PMC
 generation:
   num_beams: 3
   max_source_length: 512
@@ -16,7 +18,9 @@ generation:
   stage2_max_new_tokens: 64
   max_span_words: 80
 training:
-  learning_rate: 1.0e-4
   batch_size: 8
   grad_accum: 2
   eval_batch_size: 32
+stage_training:
+  stage1: {learning_rate: 5.0e-4}
+  stage2: {learning_rate: 5.0e-5}

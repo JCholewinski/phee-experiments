@@ -1,3 +1,6 @@
+# LLM, improved version: our prompt (definitions of the arguments and the trigger,
+# labelling rules, JSON answer with the trigger). Demonstrations chosen as in the
+# baseline (base.yaml), so the two versions differ only in the prompt.
 inherit: base.yaml
 model:
   name: Qwen/Qwen3-8B

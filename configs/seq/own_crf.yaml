@@ -1,5 +1,8 @@
+# Improved sequence labeling (main plan): CRF with learned transitions and the BIO
+# constraints (forbidden transitions) in training and decoding.
 inherit: own_base.yaml
 model:
   head: crf
 training:
   crf_learning_rate: 1.0e-3     # transition scores start at 0 and need a larger step
+decodings: [viterbi]

@@ -63,6 +63,9 @@ def main():
     config = load_config(config_path)
     for assignment in args.set:
         apply_override(config, assignment)
+    sample = (config.get("data") or {}).get("train_sample")
+    if sample and sample.get("seed") == "run":
+        sample["seed"] = args.seed   # a different random subset of train for every seed
     if args.name:
         config["name"] = args.name
     elif not config.get("name"):

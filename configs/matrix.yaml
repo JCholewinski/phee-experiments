@@ -1,12 +1,12 @@
 # Experiment groups for scripts/run_matrix.py (each config x each seed).
 #
-# Main plan (decision of 3.11.2026): two versions per method, the authors' baseline and
-# the improved version.
-#   test mode:     python scripts/run_matrix.py --groups baselines improved --seeds 1
-#                  (+ the llm group in the vLLM environment)
-#   final results: python scripts/run_matrix.py --groups baselines improved --seeds 2 3
-# The extra_* groups hold the remaining implemented variants (ablations), not run by
-# default.
+# Main plan: two versions of every method on the same model, the authors' baseline and
+# the improved version, plus one additional LLM comparison (demonstrations from only 50
+# labelled sentences). The whole plan runs with scripts/vast/run_plan.sh:
+#   test mode:     bash scripts/vast/run_plan.sh test    (seed 1 of every run)
+#   final results: bash scripts/vast/run_plan.sh final   (seeds 1-3; finished seed-1 runs are reused)
+# The llm groups need the vLLM environment (/workspace/venv-llm). The extra_* groups hold
+# the remaining implemented variants (ablations), not run by the plan.
 groups:
   baselines:                    # reproductions of the PHEE paper settings
     seeds: [1, 2, 3]
@@ -14,10 +14,10 @@ groups:
       - configs/seq/authors_baseline.yaml
       - configs/eqa/authors_baseline.yaml
       - configs/gqa/authors_baseline.yaml
-  improved:                     # the improved version of every method
+  improved:                     # the improved version of every method, same model as its baseline
     seeds: [1, 2, 3]
     configs:
-      - configs/seq/own_crf.yaml                  # argmax and Viterbi decoding inside the run
+      - configs/seq/own_crf.yaml
       - configs/eqa/own_current_predicted.yaml
       - configs/gqa/own_current_predicted.yaml    # free and constrained decoding inside the run
   llm:                          # greedy decoding: deterministic, one run; 0-shot and 5-shot inside
@@ -25,9 +25,13 @@ groups:
     fixed_seeds: true
     configs:
       - configs/llm/qwen3_8b_authors_prompt.yaml   # baseline: the authors' prompt (Sun et al. 2024)
-      - configs/llm/qwen3_8b.yaml                  # improved: our prompt
+      - configs/llm/qwen3_8b.yaml                  # improved: our prompt, same demonstrations
+  llm_pool50:                   # additional comparison: demonstrations from 50 random sentences
+    seeds: [1, 2, 3]            # a different random subset of 50 sentences for every seed
+    configs:
+      - configs/llm/qwen3_8b_pool50.yaml
 
-  # ---- optional: remaining variants (not part of the main plan) ----
+  # ---- optional: remaining variants (not part of the plan) ----
   extra_seq_heads:
     seeds: [1, 2, 3]
     configs:
@@ -50,13 +54,25 @@ groups:
     fixed_seeds: true
     configs:
       - configs/llm/llama31_8b.yaml
-  # low-resource check: only 50 random labelled training sentences (same 50 in both)
-  low_resource_llm:             # run in the vLLM environment
-    seeds: [1]
-    fixed_seeds: true
-    configs:
-      - configs/llm/qwen3_8b_pool50.yaml
-  low_resource_trained:
-    seeds: [1, 2, 3]
-    configs:
-      - configs/seq/own_crf_train50.yaml
+
+# Rows of results/tables/comparison_<split>.md: version A -> version B of every method.
+# `variant` is a part of the variant name (needed when a run has several variants).
+comparison:
+  - method: Sequence labeling
+    a: {experiment: seq__authors_baseline}
+    b: {experiment: seq__own_crf}
+  - method: Extractive QA
+    a: {experiment: eqa__authors_baseline}
+    b: {experiment: eqa__own_current_predicted}
+  - method: Generative QA
+    a: {experiment: gqa__authors_baseline}
+    b: {experiment: gqa__own_current_predicted, variant: decoding=constrained}
+  - method: LLM, 0-shot
+    a: {experiment: llm__qwen3_8b_authors_prompt, variant: shots=0}
+    b: {experiment: llm__qwen3_8b, variant: shots=0}
+  - method: LLM, 5-shot
+    a: {experiment: llm__qwen3_8b_authors_prompt, variant: shots=5}
+    b: {experiment: llm__qwen3_8b, variant: shots=5}
+  - method: "LLM, 5-shot: pool 2898 -> 50 sentences"
+    a: {experiment: llm__qwen3_8b, variant: shots=5}
+    b: {experiment: llm__qwen3_8b_pool50, variant: shots=5}

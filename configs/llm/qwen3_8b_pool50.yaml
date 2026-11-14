@@ -1,6 +1,9 @@
-# Low-resource variant: few-shot demonstrations are retrieved (BM25) from only 50 random
-# training sentences instead of all 2898 (0-shot does not depend on the pool).
+# Additional comparison: are thousands of labelled sentences needed as the pool of
+# demonstrations? The improved prompt with demonstrations retrieved (BM25, 5 per event
+# type) from only 50 random training sentences instead of all 2898. The 50 sentences
+# depend on the run seed (seeds 1, 2, 3 = three different random subsets).
+# 0-shot does not depend on the pool, so only 5-shot is run.
 inherit: qwen3_8b.yaml
 shots: [5]
 data:
-  train_sample: {size: 50, seed: 13}
+  train_sample: {size: 50, seed: run}

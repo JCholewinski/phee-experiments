@@ -55,12 +55,13 @@ fi
 
 cat <<'EOF'
 
-Setup done. Next steps:
+Setup done. Next steps (README, "Uruchomienie na vast.ai"):
   0. In this terminal run:   source ~/.bashrc
-  1. Accept the Gemma license for google/t5gemma-b-b-ul2 on huggingface.co, then:
-       python -c "from huggingface_hub import login; login()"
-  2. Quick check on real models (downloads models, ~1 epoch on 200 sentences per method):
+  1. Quick check on real models (downloads models, ~1 epoch on 200 sentences per method,
+     LLM on 20 sentences; needs the vLLM environment from 'setup.sh --llm'):
        nohup bash scripts/vast/quick_check.sh > quick.log 2>&1 &
-  3. Test mode (seed 1), then the remaining seeds (see README, section 5):
-       nohup sh -c 'python scripts/run_matrix.py --groups baselines improved --seeds 1; /workspace/venv-llm/bin/python scripts/run_matrix.py --groups llm' > matrix.log 2>&1 &
+  2. Test mode (seed 1 of every run, then tables in results/tables/):
+       GPU_PRICE=<USD per hour of this instance> nohup bash scripts/vast/run_plan.sh test > plan_test.log 2>&1 &
+  3. After checking the test results, the final seeds 2 and 3:
+       GPU_PRICE=<USD per hour> nohup bash scripts/vast/run_plan.sh final > plan_final.log 2>&1 &
 EOF

@@ -1,5 +1,18 @@
 # Otwarte kwestie (do sprawdzenia później)
 
+## Decyzje z 14.11.2026 (plan 2. rundy)
+
+- Ten sam model w obu wersjach każdej metody: SL i extractive QA BioBERT v1.1, generative
+  QA SciFive-base-PMC (LR jak w baseline), LLM Qwen3-8B. Ustawienia treningu jak w baseline.
+- Baseline SL z warstwą CRF (jak końcowy system autorów), bez łączenia modeli w ACE.
+- Wersja rozwinięta SL: CRF z zakazem przejść BIO, dekodowanie Viterbi (bez wariantu argmax).
+- LLM: przykłady w obu wersjach jak u Sun i in. (BM25, 5 z ADE + 5 z PTE); wersje różnią
+  się tylko promptem. Test dodatkowy: przykłady z 50 losowych zdań (inne dla każdego seeda).
+  Bez porównania z SL trenowanym na 50 zdaniach.
+- Uruchomienie: `scripts/vast/run_plan.sh test`, sprawdzenie, `run_plan.sh final`.
+- Do decyzji: znacznik pozycji triggera w zdaniu w extractive QA (to samo słowo-trigger w
+  dwóch miejscach albo jeden trigger dwóch zdarzeń: 5 z 40 zdań wielozdarzeniowych w teście).
+
 Stan na 28.10.2026, koniec sesji implementacji (przerwanej z powodu limitu kredytów).
 
 ## Do decyzji

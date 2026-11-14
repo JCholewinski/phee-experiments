@@ -1,5 +1,0 @@
-# Low-resource variant: the improved sequence labeling trained on the same 50 random
-# training sentences that form the LLM demonstration pool (llm/qwen3_8b_pool50.yaml).
-inherit: own_crf.yaml
-data:
-  train_sample: {size: 50, seed: 13}
