@@ -182,16 +182,28 @@ def _skip(span):
     return "n/a" in span or "null" in span or "none" in span or "not mentioned" in span
 
 
+def _event_type(name):
+    """The authors' event name ("adverse event", "potential therapeutic event") -> ADE / PTE."""
+    name = str(name or "").strip().lower()
+    if "therapeutic" in name or name == "pte":
+        return "PTE"
+    if "adverse" in name or name == "ade":
+        return "ADE"
+    return None
+
+
 def to_predictions(parsed):
-    """Authors' answer format -> unified predictions (no triggers); (predictions, valid)."""
+    """Authors' answer format -> unified predictions (no triggers); (predictions, valid).
+    Every item keeps the index and the type of its event."""
     if isinstance(parsed, dict):
         parsed = parsed.get("events", [parsed])
     if not isinstance(parsed, list):
         return [], False
     predictions = []
-    for event in parsed:
+    for event_index, event in enumerate(parsed):
         if not isinstance(event, dict):
             continue
+        event_type = _event_type(event.get("event_type"))
         arguments = event.get("arguments", {})
         if isinstance(arguments, list):  # the format written in the instruction
             pairs = [(a.get("argument_type"), a.get("argument_span")) for a in arguments if isinstance(a, dict)]
@@ -207,5 +219,8 @@ def to_predictions(parsed):
             for value in spans:
                 value = str(value).strip()
                 if value and not _skip(value):
-                    predictions.append({"label": label, "text": value})
+                    item = {"label": label, "text": value, "event": event_index}
+                    if event_type:
+                        item["event_type"] = event_type
+                    predictions.append(item)
     return predictions, True

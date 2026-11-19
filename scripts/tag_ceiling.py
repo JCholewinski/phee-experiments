@@ -12,6 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from phee.events import assign_by_nearest_trigger
 from phee.data import load_samples  # noqa: E402
 from phee.evaluation import evaluate  # noqa: E402
 from phee.io import write_json  # noqa: E402
@@ -57,12 +58,13 @@ def main():
     samples = load_samples(args.data)
     report = {}
     for name, function in (("two_level", two_level), ("authors_flat", authors_flat)):
-        metrics = evaluate(samples, [{"id": s["id"], "pred": function(s)} for s in samples])
+        # perfect tags -> spans -> events grouped by the rule used by sequence labeling
+        metrics = evaluate(samples, [{"id": s["id"], "pred": assign_by_nearest_trigger(function(s))} for s in samples])
         report[name] = {
             "summary": metrics["summary"],
             "per_label_f1": {label: values["em"]["f1"] for label, values in metrics["per_label"].items()},
         }
-        print(name, json.dumps({k: round(100 * v, 1) for k, v in metrics["summary"].items()}, indent=1))
+        print(name, json.dumps({k: (round(100 * v, 1) if v is not None else None) for k, v in metrics["summary"].items()}, indent=1))
     write_json(report, args.output)
 
 

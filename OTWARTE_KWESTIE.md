@@ -13,6 +13,17 @@
 - Do decyzji: znacznik pozycji triggera w zdaniu w extractive QA (to samo słowo-trigger w
   dwóch miejscach albo jeden trigger dwóch zdarzeń: 5 z 40 zdań wielozdarzeniowych w teście).
 
+## Decyzje z 19.11.2026 (metryki zdarzeń)
+
+- Metryki główne: argumenty F1 (jak autorzy), rdzeń zdarzenia (typ, lek), argumenty w
+  zdarzeniu (ogółem i na zdaniach z kilkoma zdarzeniami), koszt. Trigger nie jest w
+  metrykach głównych. Token-F1, triggery, subargumenty, etykiety: diagnostyka.
+- Predykcje zapisują numer zdarzenia każdego elementu (analiza błędów później, z plików).
+- SL: zdarzenia z reguły „najbliższy trigger” (obie wersje). Przy idealnych etykietach
+  daje ona na zdaniach z kilkoma zdarzeniami tylko 71,2 (format własny) / 67,3 (autorów)
+  F1 argumentów w zdarzeniu -- do przemyślenia, czy SL potrzebuje lepszego łączenia.
+- Później: analiza błędów (granica / zła etykieta / pominięty / nadmiarowy).
+
 Stan na 28.10.2026, koniec sesji implementacji (przerwanej z powodu limitu kredytów).
 
 ## Do decyzji

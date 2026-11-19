@@ -20,6 +20,8 @@ MAIN_METRICS = [
     "sub_classification_token_f1",
     "arguments_classification_f1",
     "overall_classification_f1",
+    "event_core_f1",
+    "event_arguments_f1",
 ]
 DEPENDENCY_KEYS = [
     "main_trigger_found_arg_found",
@@ -36,6 +38,10 @@ SUBSET_METRICS = [
     "multi_event_main_classification_f1",
     "single_event_overall_classification_f1",
     "multi_event_overall_classification_f1",
+    "single_event_event_core_f1",
+    "multi_event_event_core_f1",
+    "single_event_event_arguments_f1",
+    "multi_event_event_arguments_f1",
 ]
 
 
@@ -188,10 +194,54 @@ def _fmt(mean, std=None, scale=100.0, digits=1):
     return f"{mean * scale:.{digits}f} ± {std * scale:.{digits}f}"
 
 
+def _f(row, metric):
+    return _fmt(row.get(metric), row.get(metric + "_std"))
+
+
+def _gpu_note(rows, price_per_hour):
+    gpus = sorted({row.get("gpus") or "?" for row in rows})
+    price = f"{price_per_hour:.2f} USD/h" if price_per_hour is not None else "no price given"
+    return (
+        "Run min / Run $: wall clock of the whole run (loading, training, dev evaluations, "
+        f"prediction of all variants of the run) x GPU price ({price}).\n"
+        f"GPU: {'; '.join(gpus)}"
+        + (" -- WARNING: runs on different GPUs, times are not comparable.\n" if len(gpus) > 1 else "\n")
+    )
+
+
 def markdown_main(rows, price_per_hour=None):
+    """The table of the conclusions: argument F1 (authors' metric), event core (type,
+    drug), arguments in the event (all sentences and multi-event sentences), cost."""
     header = (
-        "| Experiment | Variant | Seeds | Trigger F1 | Main F1 | Sub F1 | Overall F1 | "
-        "Train min | Run min | Run $ | Inference ms/sent | GPU GB (train/inf) |\n"
+        "| Experiment | Variant | Seeds | Arguments F1 | Event core F1 | Arguments in event F1 | "
+        "Arguments in event F1 multi-event | Run min | Run $ |\n"
+        "|---|---|---|---|---|---|---|---|---|\n"
+    )
+    lines = [
+        f"| {row['experiment']} | {row['variant']} | {row['seeds']} | "
+        f"{_f(row, 'main_classification_f1')} | {_f(row, 'event_core_f1')} | "
+        f"{_f(row, 'event_arguments_f1')} | {_f(row, 'multi_event_event_arguments_f1')} | "
+        f"{_fmt(row.get('run_minutes'), None, scale=1)} | {_fmt(row.get('run_cost_usd'), None, scale=1, digits=2)} |"
+        for row in rows
+    ]
+    note = (
+        "\nEM-F1 [%], mean ± std over seeds.\n"
+        "Arguments F1: main arguments (SUBJECT, TREATMENT, EFFECT), unique (label, text) pairs "
+        "per sentence, as in the PHEE paper (does not check the event of an argument).\n"
+        "Event core F1: (event type, drug) per event; drug = Treatment.Drug (else the "
+        "treatment text).\n"
+        "Arguments in event F1: (event type, drug, label, text): an argument counts only if it "
+        "is attached to an event with the right core.\n"
+        + _gpu_note(rows, price_per_hour)
+    )
+    return header + "\n".join(lines) + "\n" + note
+
+
+def markdown_details(rows, price_per_hour=None):
+    """Appendix: triggers, sub-arguments, token-F1, time, memory."""
+    header = (
+        "| Experiment | Variant | Trigger F1 | Trigger F1 (no type) | Main F1 | Main token-F1 | "
+        "Sub F1 | Sub token-F1 | Overall F1 | Train min | Inference ms/sent | GPU GB (train/inf) |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|\n"
     )
     lines = []
@@ -200,46 +250,37 @@ def markdown_main(rows, price_per_hour=None):
         if row["inference_peak_gpu_gb"] is None and row.get("inference_model_weights_gb") is not None:
             inference_gpu = f"{row['inference_model_weights_gb']:.1f} (weights)"
         lines.append(
-            f"| {row['experiment']} | {row['variant']} | {row['seeds']} | "
-            f"{_fmt(row['trigger_classification_f1'], row['trigger_classification_f1_std'])} | "
-            f"{_fmt(row['main_classification_f1'], row['main_classification_f1_std'])} | "
-            f"{_fmt(row['sub_classification_f1'], row['sub_classification_f1_std'])} | "
-            f"{_fmt(row['overall_classification_f1'], row['overall_classification_f1_std'])} | "
+            f"| {row['experiment']} | {row['variant']} | "
+            f"{_f(row, 'trigger_classification_f1')} | {_f(row, 'trigger_identification_f1')} | "
+            f"{_f(row, 'main_classification_f1')} | {_f(row, 'main_classification_token_f1')} | "
+            f"{_f(row, 'sub_classification_f1')} | {_f(row, 'sub_classification_token_f1')} | "
+            f"{_f(row, 'overall_classification_f1')} | "
             f"{_fmt(row['train_minutes'], row['train_minutes_std'], scale=1)} | "
-            f"{_fmt(row.get('run_minutes'), None, scale=1)} | "
-            f"{_fmt(row.get('run_cost_usd'), None, scale=1, digits=2)} | "
             f"{_fmt(row['inference_ms_per_sentence'], None, scale=1)} | "
             f"{_fmt(row['train_peak_gpu_gb'], None, scale=1)} / {inference_gpu} |"
         )
-    gpus = sorted({row.get("gpus") or "?" for row in rows})
-    price = f"{price_per_hour:.2f} USD/h" if price_per_hour is not None else "no price given"
     note = (
-        "\nEM-F1 [%], mean ± std over seeds. Trigger F1 is not reported for the LLM baseline "
-        "(the prompt of Sun et al. 2024 does not ask for triggers).\n"
-        "Run min / Run $: wall clock of the whole run (loading, training, dev evaluations, "
-        f"prediction of all variants of the run) x GPU price ({price}).\n"
+        "\nEM-F1 / token-F1 [%], mean ± std over seeds. Trigger F1 is not reported for the LLM "
+        "baseline (the prompt of Sun et al. 2024 does not ask for triggers).\n"
         "GPU GB: peak memory allocated by PyTorch. LLM rows with vLLM show the size of the "
         "model weights, because vLLM reserves a fixed share of the GPU for its KV cache.\n"
-        f"GPU: {'; '.join(gpus)}"
-        + (" -- WARNING: runs on different GPUs, times are not comparable.\n" if len(gpus) > 1 else "\n")
     )
     return header + "\n".join(lines) + "\n" + note
 
 
 def markdown_subsets(rows):
     header = (
-        "| Experiment | Variant | Main F1 single-event | Main F1 multi-event | "
-        "Overall F1 single-event | Overall F1 multi-event |\n|---|---|---|---|---|---|\n"
+        "| Experiment | Variant | Arguments F1 single / multi | Event core F1 single / multi | "
+        "Arguments in event F1 single / multi |\n|---|---|---|---|---|\n"
     )
     lines = [
         f"| {row['experiment']} | {row['variant']} | "
-        f"{_fmt(row['single_event_main_classification_f1'], row['single_event_main_classification_f1_std'])} | "
-        f"{_fmt(row['multi_event_main_classification_f1'], row['multi_event_main_classification_f1_std'])} | "
-        f"{_fmt(row['single_event_overall_classification_f1'], row['single_event_overall_classification_f1_std'])} | "
-        f"{_fmt(row['multi_event_overall_classification_f1'], row['multi_event_overall_classification_f1_std'])} |"
+        f"{_f(row, 'single_event_main_classification_f1')} / {_f(row, 'multi_event_main_classification_f1')} | "
+        f"{_f(row, 'single_event_event_core_f1')} / {_f(row, 'multi_event_event_core_f1')} | "
+        f"{_f(row, 'single_event_event_arguments_f1')} / {_f(row, 'multi_event_event_arguments_f1')} |"
         for row in rows
     ]
-    return header + "\n".join(lines) + "\n"
+    return header + "\n".join(lines) + "\n\nEM-F1 [%]: sentences with one event / with several events.\n"
 
 
 def markdown_labels(label_rows):
@@ -273,20 +314,23 @@ def plot_quality_cost(rows, path):
         import matplotlib.pyplot as plt
     except ImportError:
         return False
-    points = [r for r in rows if r.get("inference_ms_per_sentence") and r.get("overall_classification_f1") is not None]
+    # the quality axis: arguments in the event (main metric); runs without events: overall F1
+    metric = "event_arguments_f1" if any(r.get("event_arguments_f1") is not None for r in rows) else "overall_classification_f1"
+    points = [r for r in rows if r.get("inference_ms_per_sentence") and r.get(metric) is not None]
     if not points:
         return False
     fig, ax = plt.subplots(figsize=(8, 5))
     for row in points:
         ax.errorbar(
-            row["inference_ms_per_sentence"], 100 * row["overall_classification_f1"],
-            yerr=100 * (row.get("overall_classification_f1_std") or 0), fmt="o", capsize=3,
+            row["inference_ms_per_sentence"], 100 * row[metric],
+            yerr=100 * (row.get(metric + "_std") or 0), fmt="o", capsize=3,
         )
-        ax.annotate(f"{row['experiment']}\n{row['variant']}", (row["inference_ms_per_sentence"], 100 * row["overall_classification_f1"]),
+        ax.annotate(f"{row['experiment']}\n{row['variant']}", (row["inference_ms_per_sentence"], 100 * row[metric]),
                     fontsize=6, xytext=(4, 4), textcoords="offset points")
     ax.set_xscale("log")
     ax.set_xlabel("Inference time per sentence on the test set [ms] (log scale)")
-    ax.set_ylabel("Overall classification EM-F1 [%]")
+    ax.set_ylabel({"event_arguments_f1": "Arguments in event EM-F1 [%]",
+                   "overall_classification_f1": "Overall classification EM-F1 [%]"}[metric])
     ax.set_title("Quality vs. inference cost (mean ± std over seeds)")
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
@@ -307,10 +351,10 @@ def _select(rows, spec):
 def markdown_comparison(rows, pairs):
     """Version A -> version B of every method (pairs from configs/matrix.yaml)."""
     columns = [
-        ("Trigger F1", "trigger_classification_f1", 100.0, 1),
-        ("Main F1", "main_classification_f1", 100.0, 1),
-        ("Sub F1", "sub_classification_f1", 100.0, 1),
-        ("Main F1 multi-event", "multi_event_main_classification_f1", 100.0, 1),
+        ("Arguments F1", "main_classification_f1", 100.0, 1),
+        ("Event core F1", "event_core_f1", 100.0, 1),
+        ("Arguments in event F1", "event_arguments_f1", 100.0, 1),
+        ("Arguments in event F1 multi-event", "multi_event_event_arguments_f1", 100.0, 1),
         ("Run $", "run_cost_usd", 1.0, 2),
     ]
     header = "| Method | A | B | " + " | ".join(name for name, *_ in columns) + " |\n"

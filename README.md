@@ -123,9 +123,11 @@ Sun i in., wersja rozwinięta, test z 50 zdaniami), potem metody trenowane (grup
 
 W `results/tables/`:
 
-- `comparison_test.md`: dla każdej metody baseline → wersja rozwinięta (trigger, argumenty
-  główne, subargumenty, zdania z kilkoma zdarzeniami, koszt) oraz test z 50 zdaniami;
-- `main_test.md`: wszystkie warianty, czasy, koszt przebiegu w USD, pamięć GPU;
+- `comparison_test.md`: dla każdej metody baseline → wersja rozwinięta (argumenty, rdzeń
+  zdarzenia, argumenty w zdarzeniu, to samo na zdaniach z kilkoma zdarzeniami, koszt) oraz
+  test z 50 zdaniami;
+- `main_test.md`: metryki główne wszystkich wariantów i koszt przebiegu w USD;
+- `details_test.md`: triggery, subargumenty, token-F1, czasy, pamięć GPU;
 - `subsets_test.md`, `labels_test.md`: zdania z jednym / kilkoma zdarzeniami, każda etykieta;
 - `checks.md`: na co zwrócić uwagę (nieudane przebiegi, etap najlepszy w ostatniej
   epoce, bardzo niskie wyniki, odpowiedzi LLM w złym formacie, ucięte generowanie).
@@ -180,7 +182,27 @@ Statystyki konwersji: `data/phee2/processed/conversion_stats.json`.
 
 ## Ewaluacja
 
-`phee/evaluation.py`, ta sama dla wszystkich metod:
+`phee/evaluation.py` i `phee/events.py`, ta sama dla wszystkich metod.
+
+**Metryki główne** (tabela `main_*.md`, z nich wyciągamy wnioski):
+
+| Metryka | Co mierzy |
+|---|---|
+| **Argumenty F1** | argumenty główne jako pary (etykieta, tekst) w zdaniu, jak w artykule PHEE; nie sprawdza, do którego zdarzenia trafił argument |
+| **Rdzeń zdarzenia F1** | pary (typ zdarzenia, lek) dla każdego zdarzenia; lek = Treatment.Drug (bez leku: tekst TREATMENT); kilka leków = kilka par; zdarzenia o tym samym rdzeniu łączone |
+| **Argumenty w zdarzeniu F1** | (typ, lek, etykieta, tekst): argument (w tym efekt, pacjent, subargumenty) liczy się tylko w zdarzeniu z poprawnym rdzeniem; ogółem i osobno na zdaniach z kilkoma zdarzeniami |
+| **Koszt** | czas całego przebiegu i jego koszt w USD |
+
+Wszystkie z dokładnym dopasowaniem znormalizowanego tekstu (EM). Każda metoda zapisuje w
+predykcjach numer zdarzenia każdego elementu (`"event"`) i jego typ (`"event_type"`), więc
+metryki zdarzeń i późniejsza analiza błędów liczą się z zapisanych plików. Sequence
+labeling oznacza tylko fragmenty; zdarzenia buduje ta sama reguła w obu wersjach: jedno
+zdarzenie na trigger, argument do najbliższego triggera, subargument do zawierającego go
+argumentu głównego (`assign_by_nearest_trigger`). Górna granica tej reguły przy
+idealnych etykietach (`scripts/tag_ceiling.py`, zdania z kilkoma zdarzeniami, argumenty w
+zdarzeniu): 71,2 (format dwupoziomowy) i 67,3 (format autorów).
+
+**Diagnostyka** (`details_*.md`, `subsets_*.md`, `labels_*.md`):
 
 - predykcja to para **(etykieta, znormalizowany tekst)**; normalizacja jak w oficjalnym
   ewaluatorze autorów (małe litery, interpunkcja jako granica, bez a/an/the);
@@ -302,7 +324,8 @@ results/<eksperyment>/seed<N>/
   training.json           każdy etap: najlepsza epoka, czas, pamięć GPU, liczba parametrów
   history/<etap>.json     przebieg treningu (loss, F1 na dev po każdej epoce)
   metrics/<wariant>__<split>.json      pełne metryki
-  predictions/<wariant>__<split>.jsonl predykcje (z surowym tekstem dla GQA/LLM)
+  predictions/<wariant>__<split>.jsonl predykcje z numerem zdarzenia każdego elementu
+                                       (z surowym tekstem dla GQA/LLM)
 results/tables/           wyniki zagregowane (średnia ± odchylenie po seedach)
 ```
 
@@ -327,4 +350,5 @@ jego koszt w USD (czas × `--gpu_price`), czas inferencji na zdanie na zbiorze t
   to ok. 93.7 F1 (`scripts/tag_ceiling.py`).
 - **Predykcje na zbiorze treningowym** (tryb „predicted” w QA) pochodzą z modelu
   trenowanego na tych samych danych, więc są lepsze niż na teście.
-- SL nie przypisuje argumentów do zdarzeń; metryka tego nie ocenia (jak u autorów).
+- SL nie przypisuje argumentów do zdarzeń; zdarzenia buduje prosta reguła (najbliższy
+  trigger), ta sama dla obu wersji, więc metryki zdarzeń SL zależą też od tej reguły.

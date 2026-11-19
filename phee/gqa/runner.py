@@ -139,12 +139,15 @@ def _stage1_predictions(texts, split_values):
     triggers, mains = [], []
     for text in texts:
         sample_triggers, sample_mains = [], []
-        for event in parse_stage1(text, split_values=split_values):
+        # "event": index of the generated event in the sentence (kept in the predictions)
+        for event_index, event in enumerate(parse_stage1(text, split_values=split_values)):
             for trigger in event["trigger"]:
-                sample_triggers.append({"label": "TRIGGER", "event_type": event["event_type"], "text": trigger})
+                sample_triggers.append({"label": "TRIGGER", "event_type": event["event_type"], "text": trigger,
+                                        "event": event_index})
             for label, values in event["args"].items():
                 for value in values:
-                    sample_mains.append({"label": label, "text": value, "event_type": event["event_type"]})
+                    sample_mains.append({"label": label, "text": value, "event_type": event["event_type"],
+                                         "event": event_index})
         triggers.append(sample_triggers)
         mains.append(sample_mains)
     return triggers, mains
@@ -175,18 +178,23 @@ def _match_event(sample, main):
 
 def _stage2_queries(samples, mains, templates):
     """One query per (sample, main argument, sub label), identical questions of one
-    sentence merged. Returns list of (sample_index, question, label)."""
+    sentence merged. Returns list of (sample_index, question, label, events): `events`
+    are the events whose main arguments asked this question (the answer is attached to
+    all of them: with the authors' questions, e.g. "Treatment.Drug in adverse event", one
+    question serves every event of that type)."""
     queries = []
-    seen = set()
+    position = {}
     for index, sample in enumerate(samples):
         for main in mains[index]:
             for label in SUB_LABELS_BY_PARENT.get(main["label"], []):
                 question = sub_question(label, main["text"], main.get("event_type"), templates)
                 key = (index, question)
-                if key in seen:
-                    continue
-                seen.add(key)
-                queries.append((index, question, label))
+                if key not in position:
+                    position[key] = len(queries)
+                    queries.append((index, question, label, []))
+                events = queries[position[key]][3]
+                if main.get("event") is not None and main["event"] not in events:
+                    events.append(main["event"])
     return queries
 
 
@@ -228,13 +236,17 @@ def _stage2_training_items(samples, tokenizer, segment_tokenizer, templates, gen
 
 def _predict_stage2(model, generate, samples, mains, templates, generation, constraint):
     queries = _stage2_queries(samples, mains, templates)
-    inputs = [build_input(question, samples[index]["context"]) for index, question, _ in queries]
-    texts = generate(model, inputs, [samples[index] for index, _, _ in queries],
+    inputs = [build_input(question, samples[index]["context"]) for index, question, _, _ in queries]
+    texts = generate(model, inputs, [samples[index] for index, _, _, _ in queries],
                      generation["stage2_max_new_tokens"], constraint)
     subs = [[] for _ in samples]
-    for (index, _, label), text in zip(queries, texts):
+    for (index, _, label, events), text in zip(queries, texts):
         for value in parse_stage2(text):
-            subs[index].append({"label": label, "text": value})
+            if events:
+                for event in events:
+                    subs[index].append({"label": label, "text": value, "event": event})
+            else:
+                subs[index].append({"label": label, "text": value})
     return subs
 
 
@@ -242,11 +254,17 @@ def _records(samples, *lists):
     records = []
     for index, sample in enumerate(samples):
         pred = []
+        event_types = {item["event"]: item["event_type"] for items in lists for item in items[index]
+                       if item.get("event") is not None and item.get("event_type")}
         for items in lists:
             for item in items[index]:
                 prediction = {"label": item["label"], "text": item["text"]}
                 if item["label"] == "TRIGGER":
                     prediction["event_type"] = item["event_type"]
+                if item.get("event") is not None:
+                    prediction["event"] = item["event"]
+                    if event_types.get(item["event"]):
+                        prediction["event_type"] = event_types[item["event"]]
                 pred.append(prediction)
         records.append({"id": sample["id"], "pred": pred})
     return records

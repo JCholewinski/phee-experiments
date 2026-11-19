@@ -14,6 +14,10 @@ Prediction format (one record per sentence):
     {"id": "...", "pred": [{"label": "TRIGGER", "event_type": "ADE", "text": "..."},
                            {"label": "TREATMENT", "text": "..."}, ...]}
 
+Event metrics (phee.events): event core (event type, drug) and arguments in the event
+(an argument counts only if attached to an event with the right core), computed from the
+event indices saved in the prediction items ("event").
+
 Extra analyses:
   * results for single-event and multi-event sentences separately;
   * "trigger dependency": every gold argument is put in a 2x2 table
@@ -23,6 +27,7 @@ Extra analyses:
 
 from collections import Counter, defaultdict
 
+from phee.events import event_items, events_from_items, gold_events
 from phee.normalize import normalize_text
 from phee.schema import MAIN_LABELS, SUB_LABELS, SUB_PARENT, TRIGGER
 
@@ -241,13 +246,18 @@ def _dependency_counts(sample, pred_view):
     return counts
 
 
-def evaluate(samples, predictions):
-    """Evaluate predictions (list of records with "id" and "pred") against gold samples."""
+def evaluate(samples, predictions, events=True):
+    """Evaluate predictions (list of records with "id" and "pred") against gold samples.
+    events: also the event metrics (items without an "event" index belong to no event,
+    so a method that saves no events gets 0 there)."""
     pred_by_id = {record["id"]: record.get("pred", []) for record in predictions}
     overall = _Accumulator()
     subsets = {"single_event": _Accumulator(), "multi_event": _Accumulator()}
     dependency = Counter()
     missing = 0
+    with_events = events
+    # event metrics: [core counts, argument counts], each [tp, fp, fn]
+    event_counts = {name: [[0, 0, 0], [0, 0, 0]] for name in ("all", "single_event", "multi_event")}
 
     for sample in samples:
         if sample["id"] not in pred_by_id:
@@ -258,10 +268,27 @@ def evaluate(samples, predictions):
         subset = "multi_event" if sample["is_multi_event"] else "single_event"
         subsets[subset].add(gold_view, pred_view)
         dependency.update(_dependency_counts(sample, pred_view))
+        if with_events:
+            gold_sets = event_items(gold_events(sample))
+            pred_sets = event_items(events_from_items(pred_by_id.get(sample["id"], [])))
+            for name in ("all", subset):
+                for counts, gold, pred in zip(event_counts[name], gold_sets, pred_sets):
+                    counts[0] += len(gold & pred)
+                    counts[1] += len(pred - gold)
+                    counts[2] += len(gold - pred)
+
+    def event_result(name):
+        if not with_events:
+            return None
+        core, arguments = event_counts[name]
+        return {"core": prf(*core), "arguments": prf(*arguments)}
 
     result = overall.result()
     result["missing_predictions"] = missing
+    result["events"] = event_result("all")
     result["subsets"] = {name: acc.result() for name, acc in subsets.items()}
+    for name in subsets:
+        result["subsets"][name]["events"] = event_result(name)
     result["dependency"] = dict(dependency)
     result["summary"] = summarize(result)
     return result
@@ -282,7 +309,13 @@ def summarize(result):
         "arguments_classification_f1": families["arguments_classification"]["em"]["f1"],
         "overall_classification_f1": families["overall_classification"]["em"]["f1"],
     }
+    events = result.get("events")
+    summary["event_core_f1"] = events["core"]["f1"] if events else None
+    summary["event_arguments_f1"] = events["arguments"]["f1"] if events else None
     for name, subset in result.get("subsets", {}).items():
+        sub_events = subset.get("events")
+        summary[f"{name}_event_core_f1"] = sub_events["core"]["f1"] if sub_events else None
+        summary[f"{name}_event_arguments_f1"] = sub_events["arguments"]["f1"] if sub_events else None
         sub_families = subset["families"]
         summary[f"{name}_main_classification_f1"] = sub_families["main_classification"]["em"]["f1"]
         summary[f"{name}_sub_classification_f1"] = sub_families["sub_classification"]["em"]["f1"]

@@ -117,7 +117,7 @@ def to_predictions(parsed):
     if not isinstance(parsed, dict) or not isinstance(parsed.get("events"), list):
         return [], False
     predictions = []
-    for event in parsed["events"]:
+    for event_index, event in enumerate(parsed["events"]):
         if not isinstance(event, dict):
             continue
         event_type = str(event.get("event_type", "")).strip().upper()
@@ -126,7 +126,8 @@ def to_predictions(parsed):
         if isinstance(trigger, list):
             trigger = trigger[0] if trigger else None
         if isinstance(trigger, str) and trigger.strip() and event_type in ("ADE", "PTE"):
-            predictions.append({"label": "TRIGGER", "event_type": event_type, "text": trigger})
+            predictions.append({"label": "TRIGGER", "event_type": event_type, "text": trigger,
+                                "event": event_index})
         for key, label in KEY_TO_LABEL.items():
             values = event.get(key, [])
             if isinstance(values, str):
@@ -135,5 +136,8 @@ def to_predictions(parsed):
                 continue
             for value in values:
                 if isinstance(value, str) and value.strip():
-                    predictions.append({"label": label, "text": value})
+                    item = {"label": label, "text": value, "event": event_index}
+                    if event_type in ("ADE", "PTE"):
+                        item["event_type"] = event_type
+                    predictions.append(item)
     return predictions, True

@@ -229,11 +229,8 @@ def iter_gold_spans(sample):
 def gold_predictions(sample):
     """Gold annotation in the unified prediction format (useful for tests)."""
     predictions = []
-    for _, label, event_type, span in iter_gold_spans(sample):
-        item = {"label": label, "text": span["text"]}
-        if label == "TRIGGER":
-            item["event_type"] = event_type
-        predictions.append(item)
+    for event_index, label, event_type, span in iter_gold_spans(sample):
+        predictions.append({"label": label, "text": span["text"], "event": event_index, "event_type": event_type})
     return predictions
 
 

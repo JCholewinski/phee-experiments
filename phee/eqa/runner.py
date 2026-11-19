@@ -277,6 +277,7 @@ def predict_mains(model, tokenizer, samples, triggers, templates, settings, answ
                 "score": answer["score"],
                 "event_type": trigger["event_type"],
                 "trigger_text": trigger["text"],
+                "trigger_key": _trigger_key(trigger),
             })
     return mains
 
@@ -300,6 +301,7 @@ def predict_subs(model, tokenizer, samples, mains, templates, settings, answer_s
                 "score": answer["score"],
                 "main_text": main["text"],
                 "event_type": main.get("event_type"),
+                "trigger_key": main.get("trigger_key"),
             })
     return subs
 
@@ -327,15 +329,32 @@ def gold_mains(samples):
     ]
 
 
-def _records(samples, *item_lists):
+def _trigger_key(trigger):
+    """Identity of a predicted trigger (one event per trigger occurrence)."""
+    return (trigger["event_type"], trigger.get("start"), trigger.get("end"), trigger["text"])
+
+
+def _records(samples, *item_lists, with_events=False):
+    """Unified prediction records. with_events (item_lists = triggers, mains, subs):
+    every item gets the index of its event: one event per predicted trigger, the main
+    arguments asked about that trigger, the sub-arguments asked about those mains."""
     records = []
     for index, sample in enumerate(samples):
         pred = []
+        event_of = {}
         for items in item_lists:
             for item in items[index]:
                 prediction = {"label": item["label"], "text": item["text"]}
+                for key in ("start", "end"):
+                    if item.get(key) is not None:
+                        prediction[key] = item[key]
                 if item["label"] == "TRIGGER":
                     prediction["event_type"] = item["event_type"]
+                if with_events:
+                    key = _trigger_key(item) if item["label"] == "TRIGGER" else item.get("trigger_key")
+                    if key is not None:
+                        prediction["event"] = event_of.setdefault(key, len(event_of))
+                        prediction["event_type"] = key[0]
                 pred.append(prediction)
         records.append({"id": sample["id"], "pred": pred})
     return records
@@ -547,7 +566,7 @@ def run(config, seed, run_dir):
 
     variant = f"triggers={trigger_mode},templates={templates},train_inputs={train_inputs}"
     for split in ("dev", "test"):
-        records = _records(data[split], triggers[split], mains[split], subs[split])
+        records = _records(data[split], triggers[split], mains[split], subs[split], with_events=True)
         for record, trig, main, sub in zip(records, triggers[split], mains[split], subs[split]):
             record["structure"] = {"triggers": trig, "mains": main, "subs": sub}
         recorder.add_variant(variant, split, data[split], records, inference[split])

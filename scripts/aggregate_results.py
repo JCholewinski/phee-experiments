@@ -4,11 +4,14 @@
 
 Writes results/tables/:
   comparison_test.md                  baseline -> improved version of every method
-  main_test.csv / main_test.md        F1 per level (mean ± std over seeds) and cost
+  main_test.md                        the main metrics (arguments, event core, arguments in
+                                      the event) and the cost, mean ± std over seeds
+  main_test.csv                       every metric of every row
+  details_test.md                     triggers, sub-arguments, token-F1, time, GPU memory
   subsets_test.md                     single-event vs multi-event sentences
   labels_test.csv / labels_test.md    F1 per label (rare labels first)
   dependency_test.csv                 trigger / parent dependency of missed arguments
-  quality_vs_cost_test.png            overall F1 vs inference time per sentence
+  quality_vs_cost_test.png            arguments-in-event F1 vs inference time per sentence
   checks.md                           what to look at (failed runs, epochs, formats)
 and the same for the dev set (*_dev.*).
 
@@ -29,6 +32,7 @@ from phee.analysis import (  # noqa: E402
     aggregate,
     markdown_comparison,
     markdown_labels,
+    markdown_details,
     markdown_main,
     markdown_subsets,
     plot_quality_cost,
@@ -58,6 +62,7 @@ def main():
         write_csv(label_rows, out / f"labels_{split}.csv")
         write_csv(dependency_rows, out / f"dependency_{split}.csv")
         (out / f"main_{split}.md").write_text(markdown_main(rows, args.gpu_price), encoding="utf-8")
+        (out / f"details_{split}.md").write_text(markdown_details(rows, args.gpu_price), encoding="utf-8")
         (out / f"comparison_{split}.md").write_text(markdown_comparison(rows, pairs), encoding="utf-8")
         (out / f"subsets_{split}.md").write_text(markdown_subsets(rows), encoding="utf-8")
         (out / f"labels_{split}.md").write_text(markdown_labels(label_rows), encoding="utf-8")

@@ -264,8 +264,9 @@ def entity_to_prediction(sample, start, end, entity):
     """(token span, entity type) -> prediction item in the unified format."""
     offsets = sample["token_offsets"]
     text = sample["context"][offsets[start][0]:offsets[end][1]]
+    position = {"tok_start": start, "tok_end": end}
     if entity in TAG_EVENT_TYPE:
-        return {"label": "TRIGGER", "event_type": TAG_EVENT_TYPE[entity], "text": text}
+        return {"label": "TRIGGER", "event_type": TAG_EVENT_TYPE[entity], "text": text, **position}
     if entity in MAIN_LABELS or entity in SUB_PARENT:
-        return {"label": entity, "text": text}
+        return {"label": entity, "text": text, **position}
     return None

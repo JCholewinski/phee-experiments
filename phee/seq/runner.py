@@ -15,6 +15,7 @@ from collections import defaultdict
 
 import torch
 
+from phee.events import assign_by_nearest_trigger
 from phee.evaluation import score_families
 from phee.experiment import RunRecorder, early_stopping_dev, load_splits
 from phee.hf import count_parameters, load_encoder, load_tokenizer, model_kwargs
@@ -196,8 +197,10 @@ def run(config, seed, run_dir):
     for strategy in decodings:
         variant = f"decoding={strategy}"
         for split in ("dev", "test"):
+            # sequence labeling tags spans only; events are rebuilt by the same rule for
+            # both versions (phee.events.assign_by_nearest_trigger)
             records = [
-                {"id": sample["id"], "pred": preds}
+                {"id": sample["id"], "pred": assign_by_nearest_trigger(preds)}
                 for sample, preds in zip(data[split], merged[split][strategy])
             ]
             metrics = recorder.add_variant(variant, split, data[split], records, inference[split][strategy])
