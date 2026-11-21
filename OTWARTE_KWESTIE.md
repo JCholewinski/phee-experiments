@@ -25,6 +25,11 @@
   nie łączą argumentów w zdarzenia). Górna granica przy idealnych etykietach, zdania z
   kilkoma zdarzeniami, argumenty w zdarzeniu: reguła 71,2 -> [TRG] 92,9 (rdzeń 88,9 -> 100).
   Ablacja: `seq/own_crf_nearest` (ten sam tagger, reguła zamiast [TRG]) w extra_seq_heads.
+- SL (decyzja 21.11): bez łączonych tagów dla fragmentów z dwiema etykietami
+  (Subject.Disorder = Treatment.Disorder, Duration = Time_elapsed). Słowo ma jeden tag,
+  wygrywa częstsza etykieta (u autorów: ostatnia w ich kolejności, ten sam wynik), więc
+  przegrana etykieta znika w treningu. Opisać w pracy jako ograniczenie SL (QA i LLM go
+  nie mają: osobne pytania / pola). Sufit [TRG]: argumenty w zdarzeniu 95,2 ogółem.
 - Później: analiza błędów (granica / zła etykieta / pominięty / nadmiarowy).
 
 Stan na 28.10.2026, koniec sesji implementacji (przerwanej z powodu limitu kredytów).
