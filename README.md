@@ -104,13 +104,13 @@ epoki przeliczony na pełne dane, pamięć GPU i czas LLM na zdanie. Wyniki traf
 ### 5. Tryb testowy (seed 1)
 
 ```bash
-GPU_PRICE=0.17 nohup bash scripts/vast/run_plan.sh test > plan_test.log 2>&1 &
+GPU_PRICE=0.25 nohup bash scripts/vast/run_plan.sh test > plan_test.log 2>&1 &
 tail -f plan_test.log
 ```
 
 `GPU_PRICE` to cena Twojej instancji w USD/h. Kolejność: część LLM (baseline z promptem
 Sun i in., wersja rozwinięta, test z 50 zdaniami), potem metody trenowane (grupy
-`baselines` i `improved`), na końcu tabele. Orientacyjnie na RTX 3090 ok. 5–6 h.
+`baselines` i `improved`), na końcu tabele. Orientacyjnie na RTX 3090 ok. 6 h.
 
 | Grupa (`configs/matrix.yaml`) | Przebiegi |
 |---|---|
@@ -145,7 +145,7 @@ katalog trafia do `results/_replaced/` (dotyczy też wyników 1. rundy, jeśli s
 ### 7. Wyniki końcowe (seedy 2 i 3)
 
 ```bash
-GPU_PRICE=0.17 nohup bash scripts/vast/run_plan.sh final > plan_final.log 2>&1 &
+GPU_PRICE=0.25 nohup bash scripts/vast/run_plan.sh final > plan_final.log 2>&1 &
 ```
 
 Uruchamia seedy 2 i 3 metod trenowanych i testu z 50 zdaniami (LLM z całą pulą jest
@@ -157,7 +157,7 @@ Orientacyjnie ok. 9–10 h na RTX 3090.
 - Nieudany przebieg ma plik `FAILED` z tracebackiem, a plan przechodzi do następnego.
 - Log każdego przebiegu: `results/logs/<eksperyment>__seed<N>.log`; stan planu:
   `python scripts/run_matrix.py --groups llm llm_pool50 baselines improved --seeds 1 2 3 --list`.
-- Tabele można przeliczyć w każdej chwili: `python scripts/aggregate_results.py --gpu_price 0.17`.
+- Tabele można przeliczyć w każdej chwili: `python scripts/aggregate_results.py --gpu_price 0.25`.
 - Pobranie wyników na swój komputer: `tar czf results.tgz results` i np. `scp` albo
   pobranie pliku w Jupyterze vast.ai.
 

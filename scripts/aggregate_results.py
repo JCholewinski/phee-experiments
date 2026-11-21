@@ -1,6 +1,6 @@
 """Aggregate all finished runs into tables and a plot.
 
-    python scripts/aggregate_results.py --results_dir results --gpu_price 0.17
+    python scripts/aggregate_results.py --results_dir results --gpu_price 0.25
 
 Writes results/tables/:
   comparison_test.md                  baseline -> improved version of every method
@@ -17,7 +17,7 @@ and the same for the dev set (*_dev.*).
 
 --gpu_price: the price of the rented GPU in USD per hour (vast.ai shows it for the
 instance); the cost of a run = its wall clock x the price. Default: the GPU_PRICE
-environment variable, else 0.17 (a typical RTX 3090 price on vast.ai).
+environment variable, else 0.25 (the price assumed for the thesis).
 """
 
 import argparse
@@ -46,7 +46,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--results_dir", default="results")
     parser.add_argument("--matrix", default=str(ROOT / "configs" / "matrix.yaml"))
-    parser.add_argument("--gpu_price", type=float, default=float(os.environ.get("GPU_PRICE", "0.17")),
+    parser.add_argument("--gpu_price", type=float, default=float(os.environ.get("GPU_PRICE", "0.25")),
                         help="GPU rental price in USD per hour")
     args = parser.parse_args()
     out = Path(args.results_dir) / "tables"

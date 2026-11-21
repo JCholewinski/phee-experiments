@@ -22,7 +22,7 @@ if ! command -v python >/dev/null 2>&1 && [[ -f /venv/main/bin/activate ]]; then
   source /venv/main/bin/activate   # vast.ai PyTorch images keep Python in /venv/main
 fi
 LLM_PY="${LLM_PY:-/workspace/venv-llm/bin/python}"
-GPU_PRICE="${GPU_PRICE:-0.17}"
+GPU_PRICE="${GPU_PRICE:-0.25}"
 
 case "${1:-}" in
   test)  seeds=(1) ;;
