@@ -1,6 +1,12 @@
-# Improved sequence labeling (main plan): CRF with learned transitions and the BIO
-# constraints (forbidden transitions) in training and decoding.
+# Improved sequence labeling (main plan):
+#  * CRF with learned transitions and the BIO constraints (forbidden transitions) in
+#    training and decoding;
+#  * events: a trigger tagger, then main-argument and sub-argument taggers run once per
+#    predicted trigger, on the sentence with that trigger marked [TRG] ... [/TRG]
+#    (MAILEX, Srivastava et al. 2023). The marker carries no event type; the type comes
+#    from the trigger tagger. Training: one example per gold trigger.
 inherit: own_base.yaml
+scheme: per_trigger
 model:
   head: crf
 training:

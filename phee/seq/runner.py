@@ -2,7 +2,12 @@
 
 Config (configs/seq/*.yaml):
   method: seq
-  scheme: two_level | authors_flat
+  scheme: two_level | per_trigger | authors_flat
+    two_level: one model for triggers + main arguments, one for sub-arguments; events
+      rebuilt by the nearest-trigger rule (phee.events.assign_by_nearest_trigger)
+    per_trigger: a trigger tagger, then main-argument and sub-argument taggers run once
+      per predicted trigger on the sentence with that trigger marked [TRG] ... [/TRG]
+      (MAILEX, Srivastava et al. 2023); everything tagged belongs to that trigger's event
   model:
     name: thomas-sounack/BioClinical-ModernBERT-base
     head: linear | mlp | crf
@@ -18,20 +23,28 @@ import torch
 from phee.events import assign_by_nearest_trigger
 from phee.evaluation import score_families
 from phee.experiment import RunRecorder, early_stopping_dev, load_splits
+from phee.schema import TRIGGER
 from phee.hf import count_parameters, load_encoder, load_tokenizer, model_kwargs
 from phee.seq.decoding import decode, native_decoding
 from phee.seq.encoding import WordEncoder, make_collate
 from phee.seq.model import TokenTagger
 from phee.seq.tagging import (
+    ARGUMENT_MAIN_TAGS,
     AUTHORS_TAGS,
+    TRIGGER_MARKERS,
+    TRIGGER_TAGS,
     OWN_MAIN_TAGS,
     OWN_SUB_TAGS,
     authors_tags_to_entities,
     authors_training_sequences,
     bio_to_entities,
     entity_to_prediction,
+    event_main_tags,
+    event_sub_tags,
     own_main_tags,
     own_sub_tags,
+    trigger_groups,
+    trigger_tags,
 )
 from phee.training import train_model, training_settings
 from phee.utils import GpuMemory, Timer, autocast_context, cleanup, get_device, log, set_seed
@@ -51,6 +64,32 @@ def _levels(scheme):
                 "name": "sub",
                 "tags": OWN_SUB_TAGS,
                 "gold": lambda sample: [own_sub_tags(sample)[0]],
+                "entities": bio_to_entities,
+                "families": ["sub_classification"],
+            },
+        ]
+    if scheme == "per_trigger":
+        return [
+            {
+                "name": "trigger",
+                "tags": TRIGGER_TAGS,
+                "gold": lambda sample: [trigger_tags(sample)[0]],
+                "entities": bio_to_entities,
+                "families": ["trigger_classification"],
+            },
+            {
+                "name": "main",
+                "tags": ARGUMENT_MAIN_TAGS,
+                "per_trigger": True,
+                "event_gold": lambda sample, events: event_main_tags(sample, events)[0],
+                "entities": bio_to_entities,
+                "families": ["main_classification"],
+            },
+            {
+                "name": "sub",
+                "tags": OWN_SUB_TAGS,
+                "per_trigger": True,
+                "event_gold": lambda sample, events: event_sub_tags(sample, events)[0],
                 "entities": bio_to_entities,
                 "families": ["sub_classification"],
             },
@@ -81,6 +120,70 @@ def _build_items(samples, encoder, level, with_labels):
             item["labels"] = [tag_index[tags[word]] for word in encoded["valid_words"]]
             items.append(item)
     return items
+
+
+def _marked_training_items(samples, encoder, level):
+    """One item per gold trigger: the sentence with that trigger marked, tags of the
+    arguments of its event only."""
+    tag_index = {tag: i for i, tag in enumerate(level["tags"])}
+    items = []
+    for sample in samples:
+        for marks, events in trigger_groups(sample):
+            item = encoder.encode(sample, marks)
+            tags = level["event_gold"](sample, events)
+            item["labels"] = [tag_index[tags[word]] for word in item["valid_words"]]
+            items.append(item)
+    return items
+
+
+def _gold_triggers(samples):
+    """Per sample: [(marks, event index, event type)] from the gold events (dev early stopping)."""
+    return [
+        [(marks, index, events[0]["event_type"]) for index, (marks, events) in enumerate(trigger_groups(sample))]
+        for sample in samples
+    ]
+
+
+def _predicted_triggers(preds):
+    """Trigger predictions of one sample -> [(marks, event index, event type)]; every
+    predicted trigger is one event (its index is stored on the trigger item)."""
+    triggers = []
+    for item in preds:
+        if item["label"] == TRIGGER and "tok_start" in item:
+            item["event"] = len(triggers)
+            triggers.append(([(item["tok_start"], item["tok_end"])], item["event"], item["event_type"]))
+    return triggers
+
+
+def _marked_queries(samples, triggers, encoder):
+    """Items (one per trigger) and their owners (sample index, event index, event type)."""
+    items, owners = [], []
+    for sample_index, (sample, sample_triggers) in enumerate(zip(samples, triggers)):
+        for marks, event, event_type in sample_triggers:
+            items.append(encoder.encode(sample, marks))
+            owners.append((sample_index, event, event_type))
+    return items, owners
+
+
+def _marked_predictions(model, samples, items, owners, emissions, level, strategy):
+    """Decoded predictions of the per-trigger items, attached to their events and
+    grouped per sample."""
+    aligned = [samples[sample_index] for sample_index, _, _ in owners]
+    grouped = [[] for _ in samples]
+    per_item = _decode_predictions(model, aligned, items, emissions, level, strategy)
+    for (sample_index, event, event_type), preds in zip(owners, per_item):
+        for prediction in preds:
+            prediction["event"] = event
+            prediction["event_type"] = event_type
+            grouped[sample_index].append(prediction)
+    return grouped
+
+
+def _add_inference(record, seconds, peak_gb):
+    record["seconds"] += seconds
+    record["peak_gpu_memory_gb"] = max(
+        [value for value in (record["peak_gpu_memory_gb"], peak_gb) if value is not None], default=None
+    )
 
 
 def _emissions(model, items, collate, batch_size, precision):
@@ -133,8 +236,13 @@ def run(config, seed, run_dir):
     recorder = RunRecorder(run_dir, config, seed)
     es_dev = early_stopping_dev(config, data)
 
+    per_trigger = config["scheme"] == "per_trigger"
     tokenizer = load_tokenizer(model_config["name"])
     encoder_helper = WordEncoder(tokenizer, max_length=model_config.get("max_length", 512))
+    marked_helper = None
+    if per_trigger:
+        tokenizer.add_tokens(list(TRIGGER_MARKERS), special_tokens=True)
+        marked_helper = WordEncoder(tokenizer, max_length=model_config.get("max_length", 512), markers=TRIGGER_MARKERS)
     pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
     collate = make_collate(pad_id)
 
@@ -144,11 +252,18 @@ def run(config, seed, run_dir):
 
     for level in levels:
         log(f"seq/{config['scheme']}: training level '{level['name']}' ({model_config['head']} head)")
-        train_items = _build_items(data["train"], encoder_helper, level, with_labels=True)
-        es_items = _build_items(es_dev, encoder_helper, level, with_labels=False)
+        marked = level.get("per_trigger", False)
+        if marked:
+            train_items = _marked_training_items(data["train"], marked_helper, level)
+            es_items, es_owners = _marked_queries(es_dev, _gold_triggers(es_dev), marked_helper)
+        else:
+            train_items = _build_items(data["train"], encoder_helper, level, with_labels=True)
+            es_items, es_owners = _build_items(es_dev, encoder_helper, level, with_labels=False), None
 
         set_seed(seed)  # the new head is initialised with this seed
         encoder = load_encoder(model_config["name"], **model_kwargs(model_config))
+        if marked:
+            encoder.resize_token_embeddings(len(tokenizer))   # rows for [TRG] and [/TRG]
         model = TokenTagger(
             encoder,
             level["tags"],
@@ -160,11 +275,14 @@ def run(config, seed, run_dir):
             crf_constrained=model_config.get("crf_constrained", True),
         )
 
-        def evaluate_dev(current_model, level=level):
+        def evaluate_dev(current_model, level=level, es_items=es_items, es_owners=es_owners):
+            # per-trigger levels: early stopping on the gold triggers of the dev sentences
             emissions = _emissions(current_model, es_items, collate, settings["eval_batch_size"], settings["precision"])
-            preds = _decode_predictions(
-                current_model, es_dev, es_items, emissions, level, native_decoding(current_model)
-            )
+            strategy = native_decoding(current_model)
+            if es_owners is None:
+                preds = _decode_predictions(current_model, es_dev, es_items, emissions, level, strategy)
+            else:
+                preds = _marked_predictions(current_model, es_dev, es_items, es_owners, emissions, level, strategy)
             records = [{"id": s["id"], "pred": p} for s, p in zip(es_dev, preds)]
             return score_families(es_dev, records, level["families"])
 
@@ -175,6 +293,18 @@ def run(config, seed, run_dir):
         recorder.add_stage(report)
 
         for split in ("dev", "test"):
+            if marked:
+                # one pass per trigger predicted by the trigger level (with the same decoding)
+                for strategy in decodings:
+                    with GpuMemory() as memory, Timer() as timer:
+                        triggers = [_predicted_triggers(preds) for preds in merged[split][strategy]]
+                        items, owners = _marked_queries(data[split], triggers, marked_helper)
+                        emissions = _emissions(model, items, collate, settings["eval_batch_size"], settings["precision"])
+                        preds = _marked_predictions(model, data[split], items, owners, emissions, level, strategy)
+                    for index, sample_preds in enumerate(preds):
+                        merged[split][strategy][index].extend(sample_preds)
+                    _add_inference(inference[split][strategy], timer.seconds, memory.peak_gb)
+                continue
             # timed from raw text (tokenization included), as in the QA pipelines
             with GpuMemory() as memory, Timer() as forward_timer:
                 items = _build_items(data[split], encoder_helper, level, with_labels=False)
@@ -184,12 +314,7 @@ def run(config, seed, run_dir):
                     preds = _decode_predictions(model, data[split], items, emissions, level, strategy)
                 for index, sample_preds in enumerate(preds):
                     merged[split][strategy][index].extend(sample_preds)
-                record = inference[split][strategy]
-                record["seconds"] += forward_timer.seconds + decode_timer.seconds
-                record["peak_gpu_memory_gb"] = max(
-                    [value for value in (record["peak_gpu_memory_gb"], memory.peak_gb) if value is not None],
-                    default=None,
-                )
+                _add_inference(inference[split][strategy], forward_timer.seconds + decode_timer.seconds, memory.peak_gb)
         del model, encoder
         cleanup()
 
@@ -197,10 +322,10 @@ def run(config, seed, run_dir):
     for strategy in decodings:
         variant = f"decoding={strategy}"
         for split in ("dev", "test"):
-            # sequence labeling tags spans only; events are rebuilt by the same rule for
-            # both versions (phee.events.assign_by_nearest_trigger)
+            # two_level / authors_flat tag spans only: events are rebuilt by the nearest-trigger
+            # rule; per_trigger already attached every argument to its trigger's event
             records = [
-                {"id": sample["id"], "pred": assign_by_nearest_trigger(preds)}
+                {"id": sample["id"], "pred": preds if per_trigger else assign_by_nearest_trigger(preds)}
                 for sample, preds in zip(data[split], merged[split][strategy])
             ]
             metrics = recorder.add_variant(variant, split, data[split], records, inference[split][strategy])

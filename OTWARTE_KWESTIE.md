@@ -19,9 +19,12 @@
   zdarzeniu (ogółem i na zdaniach z kilkoma zdarzeniami), koszt. Trigger nie jest w
   metrykach głównych. Token-F1, triggery, subargumenty, etykiety: diagnostyka.
 - Predykcje zapisują numer zdarzenia każdego elementu (analiza błędów później, z plików).
-- SL: zdarzenia z reguły „najbliższy trigger” (obie wersje). Przy idealnych etykietach
-  daje ona na zdaniach z kilkoma zdarzeniami tylko 71,2 (format własny) / 67,3 (autorów)
-  F1 argumentów w zdarzeniu -- do przemyślenia, czy SL potrzebuje lepszego łączenia.
+- SL (decyzja 21.11): wersja rozwinięta taguje argumenty osobno dla każdego triggera,
+  zaznaczonego w zdaniu znacznikami [TRG] ... [/TRG] bez typu zdarzenia (jak MAILEX,
+  Srivastava i in. 2023). Baseline zostaje z regułą „najbliższy trigger” (autorzy w ogóle
+  nie łączą argumentów w zdarzenia). Górna granica przy idealnych etykietach, zdania z
+  kilkoma zdarzeniami, argumenty w zdarzeniu: reguła 71,2 -> [TRG] 92,9 (rdzeń 88,9 -> 100).
+  Ablacja: `seq/own_crf_nearest` (ten sam tagger, reguła zamiast [TRG]) w extra_seq_heads.
 - Później: analiza błędów (granica / zła etykieta / pominięty / nadmiarowy).
 
 Stan na 28.10.2026, koniec sesji implementacji (przerwanej z powodu limitu kredytów).

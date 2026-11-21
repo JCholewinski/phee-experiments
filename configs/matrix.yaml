@@ -35,6 +35,7 @@ groups:
   extra_seq_heads:
     seeds: [1, 2, 3]
     configs:
+      - configs/seq/own_crf_nearest.yaml        # ablation: nearest-trigger rule instead of [TRG] tagging
       - configs/seq/own_linear.yaml
       - configs/seq/own_mlp.yaml
   extra_eqa_variants:

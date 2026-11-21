@@ -108,6 +108,60 @@ def own_sub_tags(sample):
     return tags, dropped
 
 
+# ------------------------------------------------------------- per-trigger scheme
+# Improved version: (1) a trigger tagger, (2) argument taggers that read the sentence
+# with ONE trigger marked by [TRG] ... [/TRG] (as in MAILEX, Srivastava et al. 2023) and
+# tag only the arguments of that trigger's event. The marker carries no event type.
+
+TRIGGER_MARKERS = ("[TRG]", "[/TRG]")
+TRIGGER_TAGS = bio_tags(["ADE_TRIGGER", "PTE_TRIGGER"])
+ARGUMENT_MAIN_TAGS = bio_tags(MAIN_LABELS)
+
+
+def trigger_tags(sample):
+    spans = [
+        (MAIN_TAG_PRIORITY["TRIGGER"], span["tok_start"], span["tok_end"], TRIGGER_TAG[event["event_type"]])
+        for event in sample["events"]
+        for span in event["trigger"]
+    ]
+    tags, _, dropped = _place_spans(len(sample["tokens"]), _unique(spans))
+    return tags, dropped
+
+
+def trigger_groups(sample):
+    """Events of a sample grouped by their trigger spans: [(marks, events)], marks =
+    [(tok_start, tok_end)]. Events with the same trigger (15 in train) form one example,
+    since the marked input is the same."""
+    groups = {}
+    for event in sample["events"]:
+        marks = tuple(sorted((span["tok_start"], span["tok_end"]) for span in event["trigger"]))
+        if marks:
+            groups.setdefault(marks, []).append(event)
+    return [(list(marks), events) for marks, events in groups.items()]
+
+
+def event_main_tags(sample, events):
+    spans = [
+        (MAIN_TAG_PRIORITY[label], span["tok_start"], span["tok_end"], label)
+        for event in events
+        for label, label_spans in event["args"].items()
+        for span in label_spans
+    ]
+    tags, _, dropped = _place_spans(len(sample["tokens"]), _unique(spans))
+    return tags, dropped
+
+
+def event_sub_tags(sample, events):
+    spans = [
+        (SUB_TAG_PRIORITY[label], span["tok_start"], span["tok_end"], label)
+        for event in events
+        for label, label_spans in event["subargs"].items()
+        for span in label_spans
+    ]
+    tags, _, dropped = _place_spans(len(sample["tokens"]), _unique(spans))
+    return tags, dropped
+
+
 def bio_to_entities(tags):
     """BIO tags -> list of (start, end, entity) (end inclusive). An I- tag that does
     not continue an entity of the same type starts a new entity."""

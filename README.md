@@ -196,11 +196,13 @@ Statystyki konwersji: `data/phee2/processed/conversion_stats.json`.
 Wszystkie z dokładnym dopasowaniem znormalizowanego tekstu (EM). Każda metoda zapisuje w
 predykcjach numer zdarzenia każdego elementu (`"event"`) i jego typ (`"event_type"`), więc
 metryki zdarzeń i późniejsza analiza błędów liczą się z zapisanych plików. Sequence
-labeling oznacza tylko fragmenty; zdarzenia buduje ta sama reguła w obu wersjach: jedno
+labeling w wersji bazowej oznacza tylko fragmenty; zdarzenia buduje reguła: jedno
 zdarzenie na trigger, argument do najbliższego triggera, subargument do zawierającego go
-argumentu głównego (`assign_by_nearest_trigger`). Górna granica tej reguły przy
-idealnych etykietach (`scripts/tag_ceiling.py`, zdania z kilkoma zdarzeniami, argumenty w
-zdarzeniu): 71,2 (format dwupoziomowy) i 67,3 (format autorów).
+argumentu głównego (`assign_by_nearest_trigger`). Wersja rozwinięta taguje argumenty osobno
+dla każdego triggera zaznaczonego znacznikami `[TRG] ... [/TRG]`, więc przypisanie do
+zdarzenia daje sam model. Górna granica przy idealnych etykietach (zdania z kilkoma
+zdarzeniami, argumenty w zdarzeniu): reguła 71,2 (format dwupoziomowy) i 67,3 (format
+autorów), tagowanie z `[TRG]` 92,9.
 
 **Diagnostyka** (`details_*.md`, `subsets_*.md`, `labels_*.md`):
 
@@ -246,7 +248,8 @@ efekt zmian z efektem modelu, dlatego od 2. rundy model jest wspólny.
 | Config | Opis |
 |---|---|
 | `authors_baseline` | jak u autorów: jeden model, etykiety złożone (argument + subargument), schemat IO, zdanie kopiowane osobno dla każdego zdarzenia, warstwa CRF z uczonymi przejściami (dekodowanie Viterbi), BioBERT |
-| `own_crf` (wersja rozwinięta) | dwa modele (poziom główny i subargumenty), BIO, zdanie z kilkoma zdarzeniami użyte raz, CRF z uczonymi przejściami i **zakazem przejść niemożliwych w BIO** w treningu i dekodowaniu (Viterbi), BioBERT |
+| `own_crf` (wersja rozwinięta) | trzy modele: tagger triggerów (z typem ADE/PTE), potem tagger argumentów głównych i tagger subargumentów uruchamiane **osobno dla każdego triggera**, zaznaczonego w zdaniu znacznikami `[TRG] ... [/TRG]` bez typu (jak MAILEX, Srivastava i in. 2023); trening: jeden przykład na trigger ze zbioru treningowego; BIO, CRF z uczonymi przejściami i **zakazem przejść niemożliwych w BIO** w treningu i dekodowaniu (Viterbi), BioBERT |
+| `own_crf_nearest` (extra, ablacja) | ten sam tagger CRF, ale jedno otagowanie całego zdania (dwa modele: poziom główny i subargumenty) i zdarzenia z reguły najbliższego triggera, jak w baseline; pokazuje, ile daje tagowanie z `[TRG]` |
 | `own_linear` / `own_mlp` (extra) | ta sama konstrukcja z głowicą liniową / MLP (256, GELU), dekodowanie argmax i Viterbi z ograniczeniami BIO |
 
 Dekodowanie (`argmax`, `viterbi`) jest liczone na tym samym wytrenowanym modelu, więc
@@ -350,5 +353,6 @@ jego koszt w USD (czas × `--gpu_price`), czas inferencji na zdanie na zbiorze t
   to ok. 93.7 F1 (`scripts/tag_ceiling.py`).
 - **Predykcje na zbiorze treningowym** (tryb „predicted” w QA) pochodzą z modelu
   trenowanego na tych samych danych, więc są lepsze niż na teście.
-- SL nie przypisuje argumentów do zdarzeń; zdarzenia buduje prosta reguła (najbliższy
-  trigger), ta sama dla obu wersji, więc metryki zdarzeń SL zależą też od tej reguły.
+- Baseline SL nie przypisuje argumentów do zdarzeń; zdarzenia buduje prosta reguła
+  (najbliższy trigger), więc jego metryki zdarzeń zależą też od tej reguły. Wersja
+  rozwinięta (`[TRG]`) zależy od taggera triggerów: zgubiony trigger to zgubione zdarzenie.

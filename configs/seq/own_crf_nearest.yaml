@@ -1,0 +1,6 @@
+# Ablation of the improved sequence labeling: the same CRF tagger, but one tagging of
+# the whole sentence (all events at once) and events rebuilt by the nearest-trigger
+# rule, as for the baseline. Compared with own_crf it shows what the per-trigger
+# tagging with the [TRG] marker gives.
+inherit: own_crf.yaml
+scheme: two_level
