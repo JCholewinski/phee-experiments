@@ -25,6 +25,15 @@
   nie łączą argumentów w zdarzenia). Górna granica przy idealnych etykietach, zdania z
   kilkoma zdarzeniami, argumenty w zdarzeniu: reguła 71,2 -> [TRG] 92,9 (rdzeń 88,9 -> 100).
   Ablacja: `seq/own_crf_nearest` (ten sam tagger, reguła zamiast [TRG]) w extra_seq_heads.
+- LLM (decyzja 24.11): nasz prompt -- subject jako JEDEN tekst (null, gdy brak), nowe
+  definicje subject (jedna, najpełniejsza wzmianka; opisy tylko z tego fragmentu) i effect
+  (cała fraza z określeniami; efekty wymienione razem = jeden fragment), tylko w prompcie
+  LLM (`LLM_DEFINITIONS`). Powód: test 22.11, 5-shot, dev: precyzja SUBJECT 67 vs 73 u
+  autorów (555 wypisanych przy 515 prawdziwych, słowa P 80 / R 83), EFFECT 65 vs 69 (te
+  same słowa, inne granice). Adnotacje: wiek/płeć/rasa/liczba wewnątrz subject; efekty
+  wymienione razem zwykle jednym fragmentem (17% zdarzeń z „and/or/,” w fragmencie vs 6% z
+  kilkoma fragmentami). W przykładach przy kilku fragmentach subject: pierwszy (pacjent).
+  Treatment bez zmian (precyzja jak u autorów).
 - Generative QA (decyzja 24.11): wersja rozwinięta `own_current_combined` -- etap 2
   trenowany na wszystkich pytaniach z prawdziwych argumentów głównych + pytaniach o
   niedokładne predykcje etapu 1 + pytaniach o predykcje bez dopasowania (odpowiedź

@@ -4,6 +4,16 @@ Following Sun et al. (2024): the best zero-shot prompt explained the schema with
 definitions, and the best few-shot setting used 5 demonstrations selected with BM25.
 Differences: local open-weight models instead of ChatGPT, triggers are extracted too,
 and the answer is a JSON object.
+
+Decision 24.11 (test run 22.11: precision of SUBJECT 67 vs 73 and EFFECT 65 vs 69 on dev
+with 5 demonstrations, against the authors' prompt): the subject is ONE string (97% of
+events have one subject fragment; the list made the model give several mentions of the
+same patients) and the definitions of subject and effect follow the annotation
+conventions (one most complete mention; the whole effect phrase with its modifiers,
+outcomes mentioned together = one fragment). In the demonstrations an event with several
+subject fragments shows the first one (the patients), so the gold JSON round trip loses
+those extra fragments (test: SUBJECT recall 96 %, all arguments 99.8 F1). The shared DEFINITIONS (phee.schema, also
+used by the QA variants) are not changed.
 """
 
 import json
@@ -13,18 +23,33 @@ from phee.schema import DEFINITIONS, MAIN_LABELS, SUB_LABELS, SUB_PARENT, TRIGGE
 
 JSON_KEYS = {label: label.lower() for label in MAIN_LABELS + SUB_LABELS}
 KEY_TO_LABEL = {key: label for label, key in JSON_KEYS.items()}
+SINGLE_VALUE = {"SUBJECT"}       # one string (or null) instead of a list
+
+LLM_DEFINITIONS = dict(DEFINITIONS)
+LLM_DEFINITIONS["SUBJECT"] = (
+    "The subject is the single phrase that names the patient or group of patients who "
+    "experienced the event, including the words that describe them in that phrase (age, "
+    "gender, race, number, disorder). If the patients are mentioned several times, give "
+    "the most complete mention."
+)
+LLM_DEFINITIONS["EFFECT"] = (
+    DEFINITIONS["EFFECT"]
+    + " Give the whole phrase that describes it, with its modifiers (e.g. 'acute', "
+    "'multiple', 'worsening of'); outcomes mentioned together in one phrase (e.g. 'rash "
+    "and fever') are one fragment."
+)
 
 
 def _definition_lines():
     lines = [
-        f"- event_type: \"ADE\" or \"PTE\". ADE: {DEFINITIONS['ADE']} PTE: {DEFINITIONS['PTE']}",
-        f"- trigger: {DEFINITIONS[TRIGGER]}",
+        f"- event_type: \"ADE\" or \"PTE\". ADE: {LLM_DEFINITIONS['ADE']} PTE: {LLM_DEFINITIONS['PTE']}",
+        f"- trigger: {LLM_DEFINITIONS[TRIGGER]}",
     ]
     for label in MAIN_LABELS:
-        lines.append(f"- {JSON_KEYS[label]}: {DEFINITIONS[label]}")
+        lines.append(f"- {JSON_KEYS[label]}: {LLM_DEFINITIONS[label]}")
     for label in SUB_LABELS:
         parent = JSON_KEYS[SUB_PARENT[label]]
-        lines.append(f"- {JSON_KEYS[label]} (detail of the {parent}): {DEFINITIONS[label]}")
+        lines.append(f"- {JSON_KEYS[label]} (detail of the {parent}): {LLM_DEFINITIONS[label]}")
     return "\n".join(lines)
 
 
@@ -38,10 +63,11 @@ Fields:
 
 Rules:
 - Copy every text EXACTLY as it appears in the sentence (same words, same spelling). Do not paraphrase.
-- Every field except event_type and trigger is a list of strings; use [] when the information is not in the sentence.
+- subject is ONE string: the single fragment that describes the patients of this event; use null when the sentence does not mention them.
+- Every other field except event_type and trigger is a list of strings; use [] when the information is not in the sentence.
 - Every sentence contains at least one event. A sentence may contain several events.
 - Answer with one JSON object and nothing else, in this form:
-{{"events": [{{"event_type": "ADE", "trigger": "...", {", ".join(f'"{JSON_KEYS[label]}": []' for label in MAIN_LABELS + SUB_LABELS)}}}]}}"""
+{{"events": [{{"event_type": "ADE", "trigger": "...", {", ".join(f'"{JSON_KEYS[label]}": ' + ("null" if label in SINGLE_VALUE else "[]") for label in MAIN_LABELS + SUB_LABELS)}}}]}}"""
 
 
 def user_message(sample):
@@ -56,7 +82,15 @@ def gold_json(sample):
             "trigger": event["trigger"][0]["text"] if event["trigger"] else "",
         }
         for label in MAIN_LABELS:
-            item[JSON_KEYS[label]] = [span["text"] for span in event["args"][label]]
+            texts = [span["text"] for span in event["args"][label]]
+            if label in SINGLE_VALUE:
+                # several fragments (3% of events, mostly a discontinuous annotation: the
+                # person first, a detached disorder later, e.g. 'a woman' ... 'for lupus
+                # nephritis'): the first fragment in the sentence, the mention of the patients
+                spans = sorted(event["args"][label], key=lambda span: span["start"])
+                item[JSON_KEYS[label]] = spans[0]["text"] if spans else None
+            else:
+                item[JSON_KEYS[label]] = texts
         for label in SUB_LABELS:
             item[JSON_KEYS[label]] = [span["text"] for span in event["subargs"][label]]
         events.append(item)

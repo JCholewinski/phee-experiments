@@ -314,7 +314,7 @@ odpowiedzi; liczba takich wyjść jest zapisywana (`stage1_truncated_outputs`,
 | Config | Opis |
 |---|---|
 | `qwen3_8b_authors_prompt` (baseline) | prompt Sun i in. (2024) z ich kodu: instrukcja „Explanation” (krótki opis każdego pola), ich format odpowiedzi i parsowanie; bez triggerów (oni o nie nie pytali), więc trigger F1 nie jest raportowany |
-| `qwen3_8b` (wersja rozwinięta) | własny prompt: definicje argumentów i triggera, reguły oznaczania, odpowiedź JSON z triggerem |
+| `qwen3_8b` (wersja rozwinięta) | własny prompt: definicje argumentów i triggera, reguły oznaczania, odpowiedź JSON z triggerem; subject jako jeden tekst, definicje subject i effect zgodne z konwencją adnotacji (od 24.11) |
 | `qwen3_8b_pool50` (test dodatkowy) | jak `qwen3_8b`, 5-shot, ale przykłady wybierane tylko z 50 losowych zdań treningowych (inne 50 dla każdego seeda) |
 
 Przykłady są dobierane **tak samo w obu wersjach**, jak u Sun i in. (2024): BM25,
