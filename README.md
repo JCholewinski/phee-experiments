@@ -275,11 +275,15 @@ trigger. Klasyfikatora typu zdarzenia wtedy nie ma.
 | `own_authors_predicted` | pytanie | autorów | na predykcjach |
 | `own_definitions_predicted` | pytanie | obecne + definicja etykiety | na predykcjach |
 
-Wybór odpowiedzi jak w kodzie autorów: fragmenty posortowane według wyniku start+end,
-brane od najlepszego aż do wyniku „brak odpowiedzi” ([CLS]), bez nakładających się,
-maks. 2 na pytanie. Pytanie o trigger działa tak samo, ale zawsze zwraca co najmniej jedną
-odpowiedź (klasyfikator już stwierdził, że zdarzenie tego typu jest w zdaniu), więc w
-zdaniu można znaleźć dwa zdarzenia tego samego typu. Żeby model nauczył się „braku
+Wybór odpowiedzi w obu wersjach jak w kodzie autorów (`selection: authors`, maks. 30
+tokenów): początek i koniec osobno powyżej wyniku „brak odpowiedzi” ([CLS]), tylko 2
+najlepszych kandydatów na pytanie, kandydat odrzucany, gdy nachodzi na fragment już
+przyjęty w zdaniu dla tego samego typu zdarzenia i roli. Wersja rozwinięta różni się od
+baseline'u tylko trzema zmianami: triggery (klasyfikator typu + pytanie o trigger),
+własne szablony pytań, trening etapów argumentów na predykcjach. Pytanie o trigger
+używa tej samej reguły, ale zawsze zwraca co najmniej jedną odpowiedź (klasyfikator już
+stwierdził, że zdarzenie tego typu jest w zdaniu), więc w zdaniu można znaleźć dwa
+zdarzenia tego samego typu. Żeby model nauczył się „braku
 odpowiedzi” przy triggerach, w treningu są też pytania o typ zdarzenia, którego w zdaniu
 nie ma.
 

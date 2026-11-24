@@ -276,7 +276,10 @@ def predict_triggers(model, tokenizer, samples, event_types, templates, settings
         for event_type in event_types[index]
     ]
     triggers = [[] for _ in samples]
-    for index, event_type, answers in _ask(model, tokenizer, queries, settings, answer_settings, model_config):
+    for index, event_type, answers in _ask_arguments(
+        model, tokenizer, queries, settings, answer_settings, model_config,
+        key=lambda meta: (meta, "TRIGGER"),      # one question per event type: the first answer stays
+    ):
         for answer in answers:
             triggers[index].append({
                 "label": "TRIGGER",

@@ -51,8 +51,12 @@ Rozstrzygnięte:
 - Extractive QA (decyzja 24.11): baseline z regułą wyboru odpowiedzi 1:1 z kodu autorów
   (`selection: authors`). Tryb testowy 22.11 pokazał precyzję argumentów głównych 45
   (pełność 68) i 54,4 EM-F1 wobec 65,7 w artykule; ich EXP_RECORD.md: ta sama precyzja
-  przy pierwotnej regule EEQA, 65,7 po zmianie reguły. Wersja rozwinięta na razie bez
-  zmian (`selection: spans`) -- do decyzji, czy też przejść na regułę autorów.
+  przy pierwotnej regule EEQA, 65,7 po zmianie reguły.
+- Extractive QA, wersja rozwinięta (decyzja 24.11): ten sam odczyt odpowiedzi co
+  baseline (reguła autorów, maks. 30 tokenów; wcześniej 60/50 i stara reguła, precyzja
+  argumentów 44, triggerów 44). Różni się tylko trzema zmianami: triggery z klasyfikatora
+  typu i pytania o trigger (reguła autorów + min. 1 odpowiedź), własne szablony, trening
+  etapów argumentów na predykcjach.
 
 ## Niesprawdzone lokalnie (brak GPU i dostępu do Hugging Face w środowisku)
 

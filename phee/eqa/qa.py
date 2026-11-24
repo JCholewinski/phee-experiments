@@ -117,7 +117,10 @@ def predict_answers(model, tokenizer, examples, settings, max_answer_length=30,
               (each separately), pairs are sorted by start + end logit and only the best
               `max_spans` candidates are returned, overlapping or not. The overlap filter
               across all questions of a sentence is applied by the caller
-              (phee.eqa.runner.authors_overlap_filter); use_null / min_spans are not used.
+              (phee.eqa.runner.authors_overlap_filter); use_null is not used. With
+              min_spans > 0 (trigger questions of the improved version: the event type
+              classifier already said the event is there) the best candidates without
+              the [CLS] condition fill up to min_spans answers.
 
     use_null  answer only if the span score exceeds the "no answer" ([CLS]) score
               plus `null_threshold`; otherwise the top `max_spans` spans are returned.
@@ -159,6 +162,7 @@ def predict_answers(model, tokenizer, examples, settings, max_answer_length=30,
                 end_logits.append(outputs.end_logits[row, :n].float().cpu())
 
     candidates = [[] for _ in examples]
+    fallback = [[] for _ in examples]      # selection="authors", min_spans > 0
     null_scores = [None] * len(examples)
     for i in range(len(features)):
         example_index = encoded["overflow_to_sample_mapping"][i]
@@ -191,38 +195,45 @@ def predict_answers(model, tokenizer, examples, settings, max_answer_length=30,
                         break
                     if k in context_set:
                         chosen.append(k)
-        else:
-            top_starts = sorted(context_positions, key=lambda k: float(s_logits[k]), reverse=True)[:n_best_size]
-            top_ends = sorted(context_positions, key=lambda k: float(e_logits[k]), reverse=True)[:n_best_size]
-        for s in top_starts:
-            for e in top_ends:
-                if e < s or e - s + 1 > max_answer_length:
-                    continue
-                char_start, char_end = offsets[s][0], offsets[e][1]
-                # byte-level BPE offsets may include the preceding space
-                while char_start < char_end and context[char_start].isspace():
-                    char_start += 1
-                while char_end > char_start and context[char_end - 1].isspace():
-                    char_end -= 1
-                if char_end <= char_start:
-                    continue
-                candidates[example_index].append({
-                    "text": context[char_start:char_end],
-                    "start": char_start,
-                    "end": char_end,
-                    "score": float(s_logits[s] + e_logits[e]),
-                })
+        all_starts = sorted(context_positions, key=lambda k: float(s_logits[k]), reverse=True)[:n_best_size]
+        all_ends = sorted(context_positions, key=lambda k: float(e_logits[k]), reverse=True)[:n_best_size]
+        if selection != "authors":
+            top_starts, top_ends = all_starts, all_ends
+        pools = [(top_starts, top_ends, candidates)]
+        if selection == "authors" and min_spans > 0:
+            pools.append((all_starts, all_ends, fallback))
+        for pool_starts, pool_ends, target in pools:
+            for s in pool_starts:
+                for e in pool_ends:
+                    if e < s or e - s + 1 > max_answer_length:
+                        continue
+                    char_start, char_end = offsets[s][0], offsets[e][1]
+                    # byte-level BPE offsets may include the preceding space
+                    while char_start < char_end and context[char_start].isspace():
+                        char_start += 1
+                    while char_end > char_start and context[char_end - 1].isspace():
+                        char_end -= 1
+                    if char_end <= char_start:
+                        continue
+                    target[example_index].append({
+                        "text": context[char_start:char_end],
+                        "start": char_start,
+                        "end": char_end,
+                        "score": float(s_logits[s] + e_logits[e]),
+                    })
 
     answers = []
     for example_index, example_candidates in enumerate(candidates):
         example_candidates.sort(key=lambda c: c["score"], reverse=True)
         if selection == "authors":
             unique = []
-            for candidate in example_candidates:
-                if all((candidate["start"], candidate["end"]) != (o["start"], o["end"]) for o in unique):
-                    unique.append(candidate)
-                if len(unique) >= max_spans:
-                    break
+            ranked_fallback = sorted(fallback[example_index], key=lambda c: c["score"], reverse=True)
+            for pool, limit in ((example_candidates, max_spans), (ranked_fallback, min_spans)):
+                for candidate in pool:
+                    if len(unique) >= limit:
+                        break
+                    if all((candidate["start"], candidate["end"]) != (o["start"], o["end"]) for o in unique):
+                        unique.append(candidate)
             answers.append(unique)
             continue
         selected = []
