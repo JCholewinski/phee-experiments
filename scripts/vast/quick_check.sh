@@ -21,7 +21,7 @@ configs=(
   eqa/authors_baseline
   eqa/own_current_predicted
   gqa/authors_baseline
-  gqa/own_current_predicted
+  gqa/own_current_combined
 )
 failed=()
 for config in "${configs[@]}"; do

@@ -117,7 +117,7 @@ Sun i in., wersja rozwinięta, test z 50 zdaniami), potem metody trenowane (grup
 | `llm` | `qwen3_8b_authors_prompt` (baseline), `qwen3_8b` (rozwinięta): 0- i 5-shot w jednym przebiegu, deterministyczne, tylko seed 1 |
 | `llm_pool50` | `qwen3_8b_pool50`: 5-shot, przykłady z 50 losowych zdań (inne 50 dla każdego seeda) |
 | `baselines` | `seq/authors_baseline`, `eqa/authors_baseline`, `gqa/authors_baseline` |
-| `improved` | `seq/own_crf`, `eqa/own_current_predicted`, `gqa/own_current_predicted` |
+| `improved` | `seq/own_crf`, `eqa/own_current_predicted`, `gqa/own_current_combined` |
 
 ### 6. Sprawdzenie wyników trybu testowego
 
@@ -140,7 +140,7 @@ Zmiana konfiguracji po trybie testowym jest wykrywana automatycznie: przebieg, k
 zapisany `config.json` różni się od obecnej konfiguracji, liczy się od nowa, a stary
 katalog trafia do `results/_replaced/` (dotyczy też wyników 1. rundy, jeśli są jeszcze w
 `results/` na maszynie). Jeśli zmieni się tylko kod metody, usuń jej katalogi z
-`results/` (np. `rm -r results/gqa__own_current_predicted`).
+`results/` (np. `rm -r results/gqa__own_current_combined`).
 
 ### 7. Wyniki końcowe (seedy 2 i 3)
 
@@ -297,7 +297,8 @@ wersja rozwinięta to wariant `constrained`. Wszystkie warianty: SciFive-base-PM
 | Config | Format celu | Szablony etapu 2 | Trening etapu 2 |
 |---|---|---|---|
 | `authors_baseline` | autorów | autorów | referencyjne |
-| `own_current_predicted` (wersja rozwinięta) | własny | obecne (wskazują argument) | predykcje etapu 1 |
+| `own_current_combined` (wersja rozwinięta) | własny | obecne (wskazują argument) | wszystkie pytania z prawdziwych argumentów + pytania o niedokładne predykcje etapu 1 + o predykcje bez dopasowania (odpowiedź „none”) |
+| `own_current_predicted` | własny | obecne | predykcje etapu 1 (wersja rozwinięta do 24.11) |
 | `own_current_gold` | własny | obecne | referencyjne |
 | `own_authors_predicted` | własny | autorów | predykcje |
 | `own_definitions_predicted` | własny | obecne + definicje | predykcje |

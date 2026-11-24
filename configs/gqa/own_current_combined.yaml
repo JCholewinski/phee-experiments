@@ -1,0 +1,11 @@
+# Improved generative QA (main plan): own stage-1 format, current stage-2 questions
+# (pointing to the main argument), constrained decoding, and stage 2 trained on
+# train_inputs: combined -- every question about a gold main argument (as the baseline),
+# plus questions about the stage-1 predictions on the training sentences: inexact
+# predicted arguments (answers of the matched gold event) and predicted arguments that
+# match no gold argument (answer "none", so that stage 2 does not invent sub-arguments
+# for a wrong main argument). Decision 24.11: with predicted inputs only (test run 22.11)
+# stage 2 lost recall on sub-arguments (dev 84 -> 78) at higher precision.
+inherit: own_base.yaml
+templates: current
+train_inputs: combined

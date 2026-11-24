@@ -25,6 +25,13 @@
   nie łączą argumentów w zdarzenia). Górna granica przy idealnych etykietach, zdania z
   kilkoma zdarzeniami, argumenty w zdarzeniu: reguła 71,2 -> [TRG] 92,9 (rdzeń 88,9 -> 100).
   Ablacja: `seq/own_crf_nearest` (ten sam tagger, reguła zamiast [TRG]) w extra_seq_heads.
+- Generative QA (decyzja 24.11): wersja rozwinięta `own_current_combined` -- etap 2
+  trenowany na wszystkich pytaniach z prawdziwych argumentów głównych + pytaniach o
+  niedokładne predykcje etapu 1 + pytaniach o predykcje bez dopasowania (odpowiedź
+  „none”, żeby nie dopisywać podargumentów do nieistniejącego argumentu). Powód: w teście
+  22.11 trening tylko na predykcjach obniżył pełność podargumentów (dev 84 -> 78) przy
+  wyższej precyzji. Spadek był na prawie wszystkich etykietach, więc przyczyną mogą być też
+  szablony lub format -- rozstrzygają warianty `own_current_gold` / `own_authors_predicted`.
 - SL (decyzja 24.11): taggery argumentów trenowane na triggerach przewidzianych przez
   etap 1 na zbiorze treningowym (`train_inputs: predicted`) i co najmniej jeden trigger w
   zdaniu (`min_triggers: 1`). Powód: w teście 22.11 wersja z [TRG] trenowana na złotych

@@ -8,8 +8,12 @@
 Variants:
   target_format  own | authors                  (stage-1 target, see phee.gqa.format)
   templates      authors | current | definitions (stage-2 questions, phee.eqa.templates)
-  train_inputs   gold | predicted               (stage-2 training questions from gold main
-                                                 arguments or from stage-1 predictions on train)
+  train_inputs   gold | predicted | combined    (stage-2 training questions from gold main
+                                                 arguments, from stage-1 predictions on train,
+                                                 or both: every gold question plus the
+                                                 questions about inexact predicted arguments
+                                                 and, with the answer "none", about predicted
+                                                 arguments matching no gold argument)
   decodings      [free, constrained]            (evaluated on the same trained models)
 
 Evaluation uses the RAW generated text (no snapping to the sentence).
@@ -18,6 +22,7 @@ scored with EM-F1 (stage 1: triggers + main arguments, stage 2: sub-arguments fr
 gold main arguments), as in the authors' configuration.
 """
 
+from collections import Counter
 import torch
 
 from phee.eqa.templates import sub_question
@@ -198,21 +203,31 @@ def _stage2_queries(samples, mains, templates):
     return queries
 
 
-def _stage2_training_items(samples, tokenizer, segment_tokenizer, templates, generation, predicted_mains=None):
+def _stage2_training_items(samples, tokenizer, segment_tokenizer, templates, generation, predicted_mains=None,
+                           include_gold=False):
+    """Stage-2 training items. predicted_mains None: questions about the gold main
+    arguments; otherwise about the predicted ones (answers from the matched gold event,
+    "none" when nothing matches); include_gold: both (train_inputs: combined). A question
+    already present with the same answers is skipped, so a predicted argument identical
+    to a gold one adds nothing."""
     items = []
     seen = set()
+    counts = Counter()
     for index, sample in enumerate(samples):
-        if predicted_mains is None:
-            pairs = [
-                ({"label": parent, "text": span["text"], "event_type": event["event_type"]}, event)
+        pairs = []
+        if predicted_mains is None or include_gold:
+            pairs += [
+                ({"label": parent, "text": span["text"], "event_type": event["event_type"]}, event, "gold")
                 for event in sample["events"]
                 for parent in SUB_LABELS_BY_PARENT
                 for span in event["args"][parent]
             ]
-        else:
-            pairs = [(main, _match_event(sample, main)) for main in predicted_mains[index]
-                     if main["label"] in SUB_LABELS_BY_PARENT]
-        for main, event in pairs:
+        if predicted_mains is not None:
+            for main in predicted_mains[index]:
+                if main["label"] in SUB_LABELS_BY_PARENT:
+                    event = _match_event(sample, main)
+                    pairs.append((main, event, "predicted" if event is not None else "no match (none)"))
+        for main, event, origin in pairs:
             for label in SUB_LABELS_BY_PARENT[main["label"]]:
                 question = sub_question(label, main["text"], main.get("event_type"), templates)
                 answers = []
@@ -222,8 +237,10 @@ def _stage2_training_items(samples, tokenizer, segment_tokenizer, templates, gen
                             answers.append(span["text"])
                 key = (index, question, tuple(answers))
                 if key in seen:
+                    counts["duplicate skipped"] += 1
                     continue
                 seen.add(key)
+                counts[origin] += 1
                 source = tokenizer(
                     build_input(question, sample["context"]),
                     max_length=generation["max_source_length"],
@@ -231,6 +248,7 @@ def _stage2_training_items(samples, tokenizer, segment_tokenizer, templates, gen
                 )["input_ids"]
                 labels = segment_tokenizer.encode(stage2_segments(answers), generation["max_target_length"])
                 items.append({"input_ids": source, "labels": labels})
+    log("gqa: stage-2 training questions: " + ", ".join(f"{key} {value}" for key, value in sorted(counts.items())))
     return items
 
 
@@ -320,7 +338,9 @@ def run(config, seed, run_dir):
             ConstraintBuilder(segment_tokenizer, symbols2, "stage2", generation["max_span_words"]),
         ),
     }
-    need_train_predictions = train_inputs == "predicted"
+    if train_inputs not in ("gold", "predicted", "combined"):
+        raise ValueError(f"unknown train_inputs: {train_inputs}")
+    need_train_predictions = train_inputs in ("predicted", "combined")
     inference = {(d, s): {"seconds": 0.0, "peak_gpu_memory_gb": None} for d in decodings for s in ("dev", "test")}
 
     def track(key, timer, memory):
@@ -378,6 +398,7 @@ def run(config, seed, run_dir):
     train_items = _stage2_training_items(
         data["train"], tokenizer, segment_tokenizer, templates, generation,
         train_mains if need_train_predictions else None,
+        include_gold=train_inputs == "combined",
     )
     fallback = False
     if not train_items:

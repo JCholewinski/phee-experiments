@@ -19,7 +19,7 @@ groups:
     configs:
       - configs/seq/own_crf.yaml
       - configs/eqa/own_current_predicted.yaml
-      - configs/gqa/own_current_predicted.yaml    # free and constrained decoding inside the run
+      - configs/gqa/own_current_combined.yaml     # free and constrained decoding inside the run
   llm:                          # greedy decoding: deterministic, one run; 0-shot and 5-shot inside
     seeds: [1]
     fixed_seeds: true
@@ -47,6 +47,7 @@ groups:
   extra_gqa_variants:
     seeds: [1, 2, 3]
     configs:
+      - configs/gqa/own_current_predicted.yaml   # stage 2 on predicted inputs only (improved version until 24.11)
       - configs/gqa/own_current_gold.yaml
       - configs/gqa/own_authors_predicted.yaml
       - configs/gqa/own_definitions_predicted.yaml
@@ -67,7 +68,7 @@ comparison:
     b: {experiment: eqa__own_current_predicted}
   - method: Generative QA
     a: {experiment: gqa__authors_baseline}
-    b: {experiment: gqa__own_current_predicted, variant: decoding=constrained}
+    b: {experiment: gqa__own_current_combined, variant: decoding=constrained}
   - method: LLM, 0-shot
     a: {experiment: llm__qwen3_8b_authors_prompt, variant: shots=0}
     b: {experiment: llm__qwen3_8b, variant: shots=0}
