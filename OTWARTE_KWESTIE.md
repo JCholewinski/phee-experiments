@@ -25,6 +25,12 @@
   nie łączą argumentów w zdarzenia). Górna granica przy idealnych etykietach, zdania z
   kilkoma zdarzeniami, argumenty w zdarzeniu: reguła 71,2 -> [TRG] 92,9 (rdzeń 88,9 -> 100).
   Ablacja: `seq/own_crf_nearest` (ten sam tagger, reguła zamiast [TRG]) w extra_seq_heads.
+- SL (decyzja 24.11): taggery argumentów trenowane na triggerach przewidzianych przez
+  etap 1 na zbiorze treningowym (`train_inputs: predicted`) i co najmniej jeden trigger w
+  zdaniu (`min_triggers: 1`). Powód: w teście 22.11 wersja z [TRG] trenowana na złotych
+  triggerach miała niższą pełność (Treatment.Drug 90 -> 77, Treatment 69 -> 58) przy tej
+  samej precyzji. Predykcje na treningu pochodzą z modelu trenowanego na tych zdaniach,
+  więc są lepsze niż na teście (to samo ograniczenie co w QA).
 - SL (decyzja 21.11): bez łączonych tagów dla fragmentów z dwiema etykietami
   (Subject.Disorder = Treatment.Disorder, Duration = Time_elapsed). Słowo ma jeden tag,
   wygrywa częstsza etykieta (u autorów: ostatnia w ich kolejności, ten sam wynik), więc

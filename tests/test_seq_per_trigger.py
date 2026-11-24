@@ -82,3 +82,34 @@ def test_events_with_the_same_trigger_are_merged():
         assert sum(len(events) for _, events in groups) == len(sample["events"])
         merged += sum(len(events) - 1 for _, events in groups)
     assert merged == 15
+
+
+def test_predicted_trigger_is_matched_to_the_nearest_event_of_its_type():
+    import torch  # noqa: F401  (the runner needs torch)
+    from phee.seq.runner import match_events
+
+    sample = {"events": [
+        {"event_type": "ADE", "trigger": [{"tok_start": 1, "tok_end": 1}], "id": "a"},
+        {"event_type": "PTE", "trigger": [{"tok_start": 6, "tok_end": 6}], "id": "p"},
+        {"event_type": "ADE", "trigger": [{"tok_start": 9, "tok_end": 10}], "id": "b"},
+    ]}
+    ids = lambda events: [e["id"] for e in events]
+    assert ids(match_events(sample, [(2, 2)], "ADE")) == ["a"]        # wrong word, nearest ADE
+    assert ids(match_events(sample, [(7, 7)], "ADE")) == ["b"]        # PTE ignored
+    assert ids(match_events(sample, [(6, 6)], "PTE")) == ["p"]
+    assert match_events({"events": sample["events"][:1]}, [(3, 3)], "PTE") == []   # no event: no arguments
+
+
+def test_forced_trigger_takes_the_best_trigger_word():
+    import torch
+    from phee.seq.runner import forced_trigger
+    from phee.seq.tagging import TRIGGER_TAGS
+
+    sample = _sample(["Isoniazid", "caused", "hepatitis", "."])
+    item = {"valid_words": [0, 1, 2, 3]}
+    scores = torch.zeros(4, len(TRIGGER_TAGS))
+    scores[1, TRIGGER_TAGS.index("B-ADE_TRIGGER")] = 2.0
+    scores[2, TRIGGER_TAGS.index("B-PTE_TRIGGER")] = 1.0
+    scores[0, TRIGGER_TAGS.index("I-ADE_TRIGGER")] = 9.0               # I- tags are not used
+    prediction = forced_trigger(sample, item, scores, TRIGGER_TAGS)
+    assert prediction["text"] == "caused" and prediction["event_type"] == "ADE"
