@@ -349,6 +349,16 @@ jego koszt w USD (czas × `--gpu_price`), czas inferencji na zdanie na zbiorze t
 - **Dane**: poprawiona wersja z 2024 r.; bez `Combination.Drug`.
 - **Baseline SL**: bez frameworku ACE (autorzy łączyli wektory BERT i BioBERT), jeden
   BioBERT z warstwą CRF, jak w końcowym systemie autorów.
+- **Baseline generative QA**: ustawienia z artykułu (SciFive PMC Base w obu etapach, beam 3,
+  maks. 20 epok z patience 2, LR 5e-4 / 5e-5, batch 16); format celu etapu 1 i pytania
+  etapu 2 („Treatment.Drug in adverse event”) jak w `preprocess/produce_genqa_stage*.py`.
+  Repozytorium autorów różni się od artykułu: `gen_qa/training_arguments_stage1.json` ma
+  model SciFive-base-Pubmed_PMC, a klucz `"generation_num_beams "` (ze spacją) jest w
+  transformers 4.16 pomijany, więc ich przebiegi dekodowały najpewniej zachłannie (beam 1).
+  Trzymamy się artykułu. Brak odpowiedzi w etapie 2 to u nas „none” (u nich pusty tekst).
+- **Baseline SL -- dekodowanie**: tagi IO zamieniane na argumenty jak w
+  `preprocess/eval_ace_pred.py` (ciągłe odcinki tego samego typu głównego / podargumentu;
+  tag samego podargumentu łączy się z sąsiednim tagiem złożonym); przegląd 24.11 zgodny.
 - **Baseline extractive QA**: tagger triggerów jak w EEQA, ale bez stałego zapytania
   „null” na wejściu i z pełną tokenizacją słów (autorzy podawali modelowi tylko pierwszy
   sub-token każdego słowa); bez znacznika pozycji triggera w pytaniach o argumenty.
