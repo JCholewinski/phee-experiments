@@ -1,7 +1,11 @@
 # Extractive QA as in the PHEE paper (EEQA): BioBERT v1.1, triggers from a word tagger
 # (first word of every trigger labelled with its event type), the authors' question
-# templates, argument stages trained on gold inputs, at most 2 answers per question
-# above the no-answer score (authors' code).
+# templates, argument stages trained on gold inputs. Answers chosen by the rule of the
+# authors' code (eeqa/code/run_stage1.py, run_stage2.py; selection: authors): start and
+# end candidates above the [CLS] logit, only the 2 best candidates per question, a
+# candidate dropped if it overlaps a span already kept in the sentence for the same event
+# type and role. Their EXP_RECORD.md: this rule gives the 65.7 of the paper (the original
+# EEQA rule: 57.4, precision 46).
 inherit: ../base.yaml
 method: eqa
 templates: authors
@@ -12,8 +16,8 @@ model:
   max_length: 384
   stride: 128
 answers:
-  main: {max_answer_length: 30, max_spans: 2, use_null: true, null_threshold: 0.0}
-  sub: {max_answer_length: 30, max_spans: 2, use_null: true, null_threshold: 0.0}
+  main: {max_answer_length: 30, max_spans: 2, selection: authors}
+  sub: {max_answer_length: 30, max_spans: 2, selection: authors}
 training:
   learning_rate: 5.0e-5
   batch_size: 16

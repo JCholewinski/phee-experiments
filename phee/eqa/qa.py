@@ -107,9 +107,17 @@ def make_collate(pad_token_id):
 
 def predict_answers(model, tokenizer, examples, settings, max_answer_length=30,
                     n_best_size=20, max_spans=1, use_null=True, null_threshold=0.0,
-                    max_length=384, stride=128, min_spans=0):
+                    max_length=384, stride=128, min_spans=0, selection="spans"):
     """Answers for every example: list (per example) of
     {"text", "start", "end", "score"} with non-overlapping character spans.
+
+    selection="authors": the rule of the PHEE authors' EEQA code (eeqa/code/run_stage1.py
+              and run_stage2.py, make_predictions with larger_than_cls=True): start and end
+              candidates are the n-best positions whose logit is at least the [CLS] logit
+              (each separately), pairs are sorted by start + end logit and only the best
+              `max_spans` candidates are returned, overlapping or not. The overlap filter
+              across all questions of a sentence is applied by the caller
+              (phee.eqa.runner.authors_overlap_filter); use_null / min_spans are not used.
 
     use_null  answer only if the span score exceeds the "no answer" ([CLS]) score
               plus `null_threshold`; otherwise the top `max_spans` spans are returned.
@@ -170,8 +178,22 @@ def predict_answers(model, tokenizer, examples, settings, max_answer_length=30,
         ]
         if not context_positions:
             continue
-        top_starts = sorted(context_positions, key=lambda k: float(s_logits[k]), reverse=True)[:n_best_size]
-        top_ends = sorted(context_positions, key=lambda k: float(e_logits[k]), reverse=True)[:n_best_size]
+        if selection == "authors":
+            # _get_best_indexes: n-best over all positions, stop below the [CLS] logit;
+            # positions outside the context are dropped afterwards
+            context_set = set(context_positions)
+            top_starts, top_ends = [], []
+            for logits, chosen in ((s_logits, top_starts), (e_logits, top_ends)):
+                cls_logit = float(logits[cls_index])
+                ranked = sorted(range(len(logits)), key=lambda k: float(logits[k]), reverse=True)
+                for k in ranked[:n_best_size]:
+                    if float(logits[k]) < cls_logit:
+                        break
+                    if k in context_set:
+                        chosen.append(k)
+        else:
+            top_starts = sorted(context_positions, key=lambda k: float(s_logits[k]), reverse=True)[:n_best_size]
+            top_ends = sorted(context_positions, key=lambda k: float(e_logits[k]), reverse=True)[:n_best_size]
         for s in top_starts:
             for e in top_ends:
                 if e < s or e - s + 1 > max_answer_length:
@@ -194,6 +216,15 @@ def predict_answers(model, tokenizer, examples, settings, max_answer_length=30,
     answers = []
     for example_index, example_candidates in enumerate(candidates):
         example_candidates.sort(key=lambda c: c["score"], reverse=True)
+        if selection == "authors":
+            unique = []
+            for candidate in example_candidates:
+                if all((candidate["start"], candidate["end"]) != (o["start"], o["end"]) for o in unique):
+                    unique.append(candidate)
+                if len(unique) >= max_spans:
+                    break
+            answers.append(unique)
+            continue
         selected = []
         for candidate in example_candidates:
             below_null = use_null and candidate["score"] <= null_scores[example_index] + null_threshold

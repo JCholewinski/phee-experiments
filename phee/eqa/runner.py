@@ -229,6 +229,7 @@ def _ask(model, tokenizer, queries, settings, answer_settings, model_config):
         use_null=answer_settings["use_null"],
         null_threshold=answer_settings["null_threshold"],
         min_spans=answer_settings.get("min_spans", 0),
+        selection=answer_settings.get("selection", "spans"),
         max_length=model_config.get("max_length", 384),
         stride=model_config.get("stride", 128),
     )
@@ -236,6 +237,35 @@ def _ask(model, tokenizer, queries, settings, answer_settings, model_config):
         (sample_index, meta, answers[position[(sample_index, question)]])
         for sample_index, _, question, meta in queries
     ]
+
+
+def authors_overlap_filter(results, key):
+    """The second half of the authors' answer rule (make_predictions in eeqa/code/run_stage*.py):
+    questions are taken in order; every candidate (at most `max_spans`, already ranked)
+    counts towards the limit, but is kept only if neither its start nor its end lies
+    inside a span already kept in the same sentence for the same event type and role
+    (also from questions about other triggers / main arguments).
+    results: [(sample_index, meta, answers)]; key(meta) -> (event type, label)."""
+    kept = {}
+    filtered = []
+    for sample_index, meta, answers in results:
+        spans = kept.setdefault((sample_index, key(meta)), [])
+        chosen = []
+        for answer in answers:
+            start, last = answer["start"], answer["end"] - 1        # inclusive, as in their code
+            overlap = any(k_start <= start <= k_last or k_start <= last <= k_last for k_start, k_last in spans)
+            if not overlap:
+                spans.append((start, last))
+                chosen.append(answer)
+        filtered.append((sample_index, meta, chosen))
+    return filtered
+
+
+def _ask_arguments(model, tokenizer, queries, settings, answer_settings, model_config, key):
+    results = _ask(model, tokenizer, queries, settings, answer_settings, model_config)
+    if answer_settings.get("selection", "spans") == "authors":
+        results = authors_overlap_filter(results, key)
+    return results
 
 
 def predict_triggers(model, tokenizer, samples, event_types, templates, settings, answer_settings, model_config):
@@ -267,7 +297,10 @@ def predict_mains(model, tokenizer, samples, triggers, templates, settings, answ
         for label in MAIN_LABELS
     ]
     mains = [[] for _ in samples]
-    for index, (label, trigger), answers in _ask(model, tokenizer, queries, settings, answer_settings, model_config):
+    for index, (label, trigger), answers in _ask_arguments(
+        model, tokenizer, queries, settings, answer_settings, model_config,
+        key=lambda meta: (meta[1]["event_type"], meta[0]),
+    ):
         for answer in answers:
             mains[index].append({
                 "label": label,
@@ -291,7 +324,10 @@ def predict_subs(model, tokenizer, samples, mains, templates, settings, answer_s
         for label in SUB_LABELS_BY_PARENT[main["label"]]
     ]
     subs = [[] for _ in samples]
-    for index, (label, main), answers in _ask(model, tokenizer, queries, settings, answer_settings, model_config):
+    for index, (label, main), answers in _ask_arguments(
+        model, tokenizer, queries, settings, answer_settings, model_config,
+        key=lambda meta: (meta[1].get("event_type"), meta[0]),
+    ):
         for answer in answers:
             subs[index].append({
                 "label": label,

@@ -48,6 +48,11 @@ Rozstrzygnięte:
 - Extractive QA (1.11): baseline autorów z taggerem triggerów jak w EEQA; własny pipeline
   z pytaniem o trigger, które zwraca wszystkie odpowiedzi powyżej „brak odpowiedzi”
   (min. 1); limit 2 odpowiedzi na pytanie wszędzie, jak w kodzie autorów.
+- Extractive QA (decyzja 24.11): baseline z regułą wyboru odpowiedzi 1:1 z kodu autorów
+  (`selection: authors`). Tryb testowy 22.11 pokazał precyzję argumentów głównych 45
+  (pełność 68) i 54,4 EM-F1 wobec 65,7 w artykule; ich EXP_RECORD.md: ta sama precyzja
+  przy pierwotnej regule EEQA, 65,7 po zmianie reguły. Wersja rozwinięta na razie bez
+  zmian (`selection: spans`) -- do decyzji, czy też przejść na regułę autorów.
 
 ## Niesprawdzone lokalnie (brak GPU i dostępu do Hugging Face w środowisku)
 

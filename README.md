@@ -347,6 +347,13 @@ jego koszt w USD (czas × `--gpu_price`), czas inferencji na zdanie na zbiorze t
 - **Baseline extractive QA**: tagger triggerów jak w EEQA, ale bez stałego zapytania
   „null” na wejściu i z pełną tokenizacją słów (autorzy podawali modelowi tylko pierwszy
   sub-token każdego słowa); bez znacznika pozycji triggera w pytaniach o argumenty.
+  Wybór odpowiedzi 1:1 z kodu autorów (`selection: authors`, `eeqa/code/run_stage1.py`,
+  `run_stage2.py`): początek i koniec osobno powyżej wyniku [CLS], tylko 2 najlepszych
+  kandydatów na pytanie, kandydat odrzucany, gdy jego początek lub koniec wpada w fragment
+  już przyjęty w zdaniu dla tego samego typu zdarzenia i roli (także z pytań o inne
+  triggery). Według ich `EXP_RECORD.md` ta reguła daje 65,7 z artykułu; pierwotna reguła
+  EEQA dawała 57,4 przy precyzji 46. Do 22.11 baseline miał regułę „do 2 nienakładających
+  się odpowiedzi powyżej [CLS]” i precyzję argumentów głównych 45 (test, seed 1).
 - **Ograniczenie SL**: w poprawionych danych 1183 spany (239 w teście) mają jednocześnie etykietę
   `SUBJECT_DISORDER` i `TREATMENT_DISORDER`, a 206 `DURATION` i `TIME_ELAPSED`. Jedna
   etykieta na token pozwala oddać tylko jedną z nich; górna granica SL dla subargumentów
