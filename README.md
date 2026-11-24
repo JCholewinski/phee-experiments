@@ -50,8 +50,20 @@ rozwinięta) oraz jeden dodatkowy test LLM (przykłady tylko z 50 oznaczonych zd
 Najpierw **tryb testowy** (seed 1 każdego przebiegu), sprawdzenie wyników, potem
 **wyniki końcowe** (seedy 2 i 3; przebiegi z seedem 1 są wykorzystane ponownie).
 
+**Najprościej (tryb testowy jednym poleceniem, w tle):** instalacja, szybki test, seed 1
+i paczka z wynikami. Terminal można zamknąć, postęp podgląda się bez blokowania:
+
+```bash
+cd /workspace && git clone https://github.com/JCholewinski/phee-experiments.git
+cd phee-experiments && git checkout experiments-v2
+nohup bash scripts/vast/run_test_all.sh > all_test.log 2>&1 &
+tail -n 30 all_test.log        # w dowolnej chwili; koniec: "##### ... DONE"
+```
+
 ### 1. Maszyna
 
+- **Sterownik z CUDA ≥ 13.0** („Max CUDA” w ofercie vast.ai): vLLM 0.34 instaluje PyTorch
+  dla CUDA 13 (w teście 22.11: obraz vastai/pytorch, torch 2.14 + cu130, Max CUDA 13.2).
 - GPU 24 GB (RTX 3090 / 4090 / 5090). Dla **RTX 5090 obraz musi mieć CUDA ≥ 12.8**
   i PyTorch ≥ 2.7, np. `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`.
 - Dysk: ok. 80 GB (modele z Hugging Face, cache, wyniki).

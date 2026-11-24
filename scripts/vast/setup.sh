@@ -29,14 +29,16 @@ fi
 PY="$(command -v python)"
 echo "Python: $PY"
 
-pip_install() {  # pip_install <python> <args...>
+pip_install() {  # pip_install <python> <args...>   (PIP_VERBOSE=1: show the progress)
   local python="$1"; shift
+  local quiet="-q"
+  [[ "${PIP_VERBOSE:-0}" == "1" ]] && quiet="--progress-bar=off"
   if "$python" -m pip --version >/dev/null 2>&1; then
-    "$python" -m pip install -q "$@"
+    "$python" -m pip install $quiet "$@"
   elif command -v uv >/dev/null 2>&1; then
-    uv pip install --python "$python" -q "$@"
+    uv pip install --python "$python" "$@"
   else
-    "$python" -m ensurepip --upgrade >/dev/null && "$python" -m pip install -q "$@"
+    "$python" -m ensurepip --upgrade >/dev/null && "$python" -m pip install $quiet "$@"
   fi
 }
 
@@ -49,7 +51,9 @@ if [[ "${1:-}" == "--llm" ]]; then
   if ! "$PY" -m venv /workspace/venv-llm 2>/dev/null; then
     uv venv /workspace/venv-llm --python "$PY"
   fi
-  pip_install /workspace/venv-llm/bin/python -r requirements-llm.txt
+  # several GB (vLLM with its own torch): print every package, so it never looks frozen
+  echo "Installing vLLM into /workspace/venv-llm (several GB, 5-20 min)..."
+  PIP_VERBOSE=1 pip_install /workspace/venv-llm/bin/python -r requirements-llm.txt
   /workspace/venv-llm/bin/python -c "import vllm; print('vllm', vllm.__version__)"
 fi
 
