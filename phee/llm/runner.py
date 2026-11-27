@@ -23,7 +23,7 @@ it chooses the pool of demonstrations (`data.train_sample.seed: run`).
 
 from phee.experiment import RunRecorder, load_splits
 from phee.llm.bm25 import BM25
-from phee.llm import authors_prompt
+from phee.llm import authors_prompt, two_stage
 from phee.llm.prompts import extract_json, messages, to_predictions
 from phee.utils import GpuMemory, Timer, log
 
@@ -159,8 +159,14 @@ def run(config, seed, run_dir):
     # prompt_style: own (our prompt and answer format) or authors (Sun et al. 2024: their
     # instruction, answer format and parsing). The demonstrations are chosen the same way
     # for both prompts (`demonstrations`), so the two versions differ only in the prompt.
-    authors_style = config.get("prompt_style", "own") == "authors"
-    if authors_style:
+    prompt_style = config.get("prompt_style", "own")
+    if prompt_style not in ("own", "authors", "two_stage"):
+        raise ValueError(f"Unknown prompt_style: {prompt_style}")
+    authors_style = prompt_style == "authors"
+    two_stages = prompt_style == "two_stage"     # phee.llm.two_stage: events, then sub-arguments per event
+    if two_stages:
+        build_messages, parse = two_stage.stage1_messages, None
+    elif authors_style:
         build_messages, parse = authors_prompt.messages, lambda text: authors_prompt.to_predictions(authors_prompt.extract_events(text))
     else:
         build_messages, parse = messages, lambda text: to_predictions(extract_json(text))
@@ -171,7 +177,7 @@ def run(config, seed, run_dir):
         retriever = BM25([sample["context"] for sample in data["train"]])
     else:
         raise ValueError(f"Unknown demonstrations: {selection}")
-    log(f"llm: prompt {'authors' if authors_style else 'own'}, demonstrations {selection}, "
+    log(f"llm: prompt {prompt_style}, demonstrations {selection}, "
         f"pool of {len(data['train'])} training sentences")
 
     for shots in shots_list:
@@ -194,13 +200,43 @@ def run(config, seed, run_dir):
                 prompts = _prompts(backend.tokenizer, samples, demonstrations,
                                    model_config.get("chat_template_kwargs"), build_messages)
                 texts, lengths = backend.generate(prompts)
+                if two_stages:
+                    # stage 2 inside the timer: one call per event found in stage 1
+                    stage1 = [two_stage.parse_stage1(text) for text in texts]
+                    prompts2, owners = [], []
+                    for index, (sample, demos, (_, events, _)) in enumerate(zip(samples, demonstrations, stage1)):
+                        # per_type: the first `shots` demonstrations were retrieved for an ADE, the rest for a PTE
+                        types = (["ADE"] * shots + ["PTE"] * len(demos))[:len(demos)] if selection == "per_type" else [None] * len(demos)
+                        pairs = [(demo, two_stage.demonstration_event(demo, event_type)) for demo, event_type in zip(demos, types)]
+                        for event_index, summary in events:
+                            prompts2.append(backend.tokenizer.apply_chat_template(
+                                two_stage.stage2_messages(sample, summary, pairs), tokenize=False,
+                                add_generation_prompt=True, **(model_config.get("chat_template_kwargs") or {}),
+                            ))
+                            owners.append((index, event_index, summary["event_type"]))
+                    texts2, lengths2 = backend.generate(prompts2) if prompts2 else ([], [])
             records = []
             invalid = 0
-            for sample, text in zip(samples, texts):
-                predictions, valid = parse(text)
-                invalid += 0 if valid else 1
-                records.append({"id": sample["id"], "pred": predictions, "raw": text, "valid_json": valid})
+            if two_stages:
+                extra, raw2, invalid2 = [[] for _ in samples], [[] for _ in samples], 0
+                for (index, event_index, event_type), text in zip(owners, texts2):
+                    predictions, valid = two_stage.parse_stage2(text, event_index, event_type)
+                    invalid2 += 0 if valid else 1
+                    extra[index].extend(predictions)
+                    raw2[index].append(text)
+                for index, (sample, text) in enumerate(zip(samples, texts)):
+                    predictions, _, valid = stage1[index]
+                    invalid += 0 if valid else 1
+                    records.append({"id": sample["id"], "pred": predictions + extra[index], "raw": text,
+                                    "raw_stage2": raw2[index], "valid_json": valid})
+            else:
+                for sample, text in zip(samples, texts):
+                    predictions, valid = parse(text)
+                    invalid += 0 if valid else 1
+                    records.append({"id": sample["id"], "pred": predictions, "raw": text, "valid_json": valid})
             prompt_tokens = [len(backend.tokenizer(prompt, add_special_tokens=False)["input_ids"]) for prompt in prompts]
+            if two_stages:
+                prompt_tokens2 = [len(backend.tokenizer(prompt, add_special_tokens=False)["input_ids"]) for prompt in prompts2]
             inference = {
                 "seconds": timer.seconds,
                 # vLLM runs the model in its own process and pre-allocates
@@ -213,5 +249,15 @@ def run(config, seed, run_dir):
                 "mean_prompt_tokens": sum(prompt_tokens) / max(1, len(prompt_tokens)),
                 "mean_output_tokens": sum(lengths) / max(1, len(lengths)),
             }
+            if two_stages:
+                # per sentence, both stages together (comparable with the one-step prompt)
+                inference.update({
+                    "mean_prompt_tokens": (sum(prompt_tokens) + sum(prompt_tokens2)) / max(1, len(samples)),
+                    "mean_output_tokens": (sum(lengths) + sum(lengths2)) / max(1, len(samples)),
+                    "stage2_calls": len(prompts2),
+                    "stage2_invalid_json": invalid2,
+                    "mean_stage1_prompt_tokens": sum(prompt_tokens) / max(1, len(prompt_tokens)),
+                    "mean_stage2_prompt_tokens": sum(prompt_tokens2) / max(1, len(prompt_tokens2)),
+                })
             recorder.add_variant(f"shots={shots}", split, samples, records, inference)
     return recorder.finish({"model_load_seconds": load_timer.seconds})
