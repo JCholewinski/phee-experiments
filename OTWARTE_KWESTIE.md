@@ -34,6 +34,16 @@
   wymienione razem zwykle jednym fragmentem (17% zdarzeń z „and/or/,” w fragmencie vs 6% z
   kilkoma fragmentami). W przykładach przy kilku fragmentach subject: pierwszy (pacjent).
   Treatment bez zmian (precyzja jak u autorów).
+- LLM, wersja dwuetapowa (sprawdzona 27.11, odrzucona 28.11; kod w commicie 09c4a81,
+  wycofany w następnym): etap 1 -- zdarzenia z typem, triggerem, subject, treatment,
+  effect; etap 2 -- jedno wywołanie na zdarzenie: zdanie + zdarzenie -> 12 podargumentów.
+  Gorsza od promptu jednoetapowego na dev i teście: 5-shot dev wszystkie argumenty 68,3
+  vs 69,9 (autorzy 70,6), podargumenty 71,9 vs 74,4, rdzeń 80,2 vs 82,3, argumenty w
+  zdarzeniu 51,4 vs 53,8; 0-shot 55,8 vs 61,9; tokeny promptu na zdanie +44% (4390 vs 3053).
+  Traci głównie Treatment.Drug i Treatment.Disorder (choroba leży w 95% poza fragmentem
+  leczenia), a etap 1 bez pól podargumentów gorzej wyznacza też argumenty główne. Zgodne z
+  Sun i in. (2024): pipeline 0-shot gorszy niż najlepszy prompt jednokrokowy; my
+  sprawdziliśmy wariant few-shot z jednym pytaniem na zdarzenie -- też gorszy.
 - LLM (decyzja 27.11): w naszym prompcie definicje time elapsed i duration wymagają
   jawnej ilości czasu (bez samego „after”, „recently”, „following”), population wyklucza
   liczebniki porządkowe i przedimki. Powód: test 24.11, 5-shot, dev -- nasz prompt trafiał
