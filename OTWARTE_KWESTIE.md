@@ -34,6 +34,17 @@
   wymienione razem zwykle jednym fragmentem (17% zdarzeń z „and/or/,” w fragmencie vs 6% z
   kilkoma fragmentami). W przykładach przy kilku fragmentach subject: pierwszy (pacjent).
   Treatment bez zmian (precyzja jak u autorów).
+- LLM (decyzja 27.11): w naszym prompcie definicje time elapsed i duration wymagają
+  jawnej ilości czasu (bez samego „after”, „recently”, „following”), population wyklucza
+  liczebniki porządkowe i przedimki. Powód: test 24.11, 5-shot, dev -- nasz prompt trafiał
+  więcej poprawnych argumentów niż prompt autorów (293 vs 266 trafionych tylko przez jeden),
+  ale miał 758 vs 576 zbędnych, głównie time elapsed (90 vs 16) i population (52 vs 8).
+  Adnotacja: 95% time elapsed i 98% duration podaje ilość czasu. Argument do pracy: z 5
+  przykładów model nie wyczyta takich reguł, więc są zapisane wprost w prompcie.
+- Generative QA (27.11): bez zmian. Wersja rozwinięta wypisuje Subject w 483 zdaniach dev
+  (prawdziwych 495), baseline w 544 -- baseline trafia więcej, bo strzela częściej. Model
+  dostrojony uczy się konwencji z 2898 zdań treningowych, więc instrukcje w wejściu nie
+  mają tu sensu; rozstrzygną seedy 2 i 3.
 - Generative QA (decyzja 24.11): wersja rozwinięta `own_current_combined` -- etap 2
   trenowany na wszystkich pytaniach z prawdziwych argumentów głównych + pytaniach o
   niedokładne predykcje etapu 1 + pytaniach o predykcje bez dopasowania (odpowiedź

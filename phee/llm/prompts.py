@@ -38,6 +38,27 @@ LLM_DEFINITIONS["EFFECT"] = (
     "'multiple', 'worsening of'); outcomes mentioned together in one phrase (e.g. 'rash "
     "and fever') are one fragment."
 )
+# Decision 27.11 (test run 24.11, 5-shot, dev: our prompt found more correct arguments than
+# the authors' prompt, 293 vs 266 found by one prompt only, but gave 758 vs 576 extra ones,
+# mostly time elapsed 90 vs 16 and population 52 vs 8, e.g. 'after initiation',
+# 'recently', 'first', 'fourth', 'a'). The annotation: 95% of time elapsed and 98% of
+# duration spans state an amount of time; population is a count ('one' is annotated 26
+# times in train, so only ordinals and articles are excluded). Five demonstrations rarely
+# show these rules, so the prompt states them.
+LLM_DEFINITIONS["TREATMENT_TIME_ELAPSED"] = (
+    "The amount of time between starting the treatment and the event, e.g. '3 weeks', "
+    "'within hours', 'after 5 days'. Give it only when the sentence states an amount of "
+    "time; words without an amount ('after', 'recently', 'following', 'prenatally') are "
+    "not a time elapsed."
+)
+LLM_DEFINITIONS["TREATMENT_DURATION"] = (
+    "How long the treatment lasted, as an amount of time, e.g. 'for 3 weeks', '6 months'. "
+    "Give it only when the sentence states an amount of time."
+)
+LLM_DEFINITIONS["SUBJECT_POPULATION"] = (
+    "The number of subjects when the sentence counts them, e.g. 'two', '15', 'a series of'. "
+    "Ordinal words ('first', 'second', 'fourth') and articles ('a', 'the') are not a population."
+)
 
 
 def _definition_lines():
