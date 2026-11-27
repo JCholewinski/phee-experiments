@@ -34,14 +34,6 @@
   wymienione razem zwykle jednym fragmentem (17% zdarzeń z „and/or/,” w fragmencie vs 6% z
   kilkoma fragmentami). W przykładach przy kilku fragmentach subject: pierwszy (pacjent).
   Treatment bez zmian (precyzja jak u autorów).
-- LLM, wersja dwuetapowa (27.11, do sprawdzenia na dev): `configs/llm/qwen3_8b_two_stage.yaml`,
-  `phee/llm/two_stage.py`. Etap 1: jedno wywołanie na zdanie -- zdarzenia z typem,
-  triggerem, subject, treatment, effect. Etap 2: jedno wywołanie na zdarzenie z etapu 1 --
-  zdanie + to zdarzenie, odpowiedź: jego 12 podargumentów. Te same definicje i przykłady
-  (BM25, 5 na typ; w etapie 2 przykład = jedno prawdziwe zdarzenie zdania). Sun i in.
-  (2024) sprawdzali pipeline tylko 0-shot, z pytaniem na każdy typ podargumentu: więcej
-  fałszywych argumentów niż najlepszy prompt jednokrokowy i ok. 10x dłużej. Grupa
-  `llm_two_stage` w matrix.yaml (poza run_plan.sh).
 - LLM (decyzja 27.11): w naszym prompcie definicje time elapsed i duration wymagają
   jawnej ilości czasu (bez samego „after”, „recently”, „following”), population wyklucza
   liczebniki porządkowe i przedimki. Powód: test 24.11, 5-shot, dev -- nasz prompt trafiał

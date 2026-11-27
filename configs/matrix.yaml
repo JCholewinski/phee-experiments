@@ -26,10 +26,6 @@ groups:
     configs:
       - configs/llm/qwen3_8b_authors_prompt.yaml   # baseline: the authors' prompt (Sun et al. 2024)
       - configs/llm/qwen3_8b.yaml                  # improved: our prompt, same demonstrations
-  llm_two_stage:                 # check 27.11 on dev (not in run_plan.sh): two-stage version of our prompt
-    seeds: [1]
-    configs:
-      - configs/llm/qwen3_8b_two_stage.yaml
   llm_pool50:                   # additional comparison: demonstrations from 50 random sentences
     seeds: [1, 2, 3]            # a different random subset of 50 sentences for every seed
     configs:

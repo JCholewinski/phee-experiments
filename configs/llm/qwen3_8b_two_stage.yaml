@@ -1,7 +1,0 @@
-# LLM, two-stage version of our prompt (decision 27.11, a check on dev, not in the plan yet):
-# stage 1 -- one call per sentence: events with type, trigger, subject, treatment, effect;
-# stage 2 -- one call per event from stage 1: the sentence and the event, answer: its 12
-# sub-arguments. Same model, demonstrations (BM25, 5 per event type) and definitions as
-# qwen3_8b.yaml. See phee/llm/two_stage.py.
-inherit: qwen3_8b.yaml
-prompt_style: two_stage
