@@ -378,6 +378,8 @@ def markdown_comparison(rows, pairs):
         lines.append(f"| {pair['method']} [seeds {a['seeds']}/{b['seeds']}] | {names[0]} | {names[1]} | "
                      + " | ".join(cells) + " |")
     note = ("\nEM-F1 [%], mean over seeds: A → B (difference). A = baseline, B = improved version; "
+            "'training on gold -> predicted/combined inputs' rows: the improved version trained on gold "
+            "inputs → as in the plan (only the training inputs differ); "
             "last LLM row: demonstrations from all 2898 training sentences → from 50 random ones. "
             "Run $: the whole run (all its variants, e.g. 0- and 5-shot of an LLM run).\n")
     return header + "\n".join(lines) + "\n" + note

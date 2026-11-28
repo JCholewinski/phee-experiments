@@ -34,6 +34,13 @@
   wymienione razem zwykle jednym fragmentem (17% zdarzeń z „and/or/,” w fragmencie vs 6% z
   kilkoma fragmentami). W przykładach przy kilku fragmentach subject: pierwszy (pacjent).
   Treatment bez zmian (precyzja jak u autorów).
+- Trening na predykcjach (decyzja 28.11): czy wersje rozwinięte QA nie uczą się na złych
+  ekstrakcjach? Grupa `train_inputs` w planie (3 seedy): `eqa/own_current_gold` i
+  `gqa/own_current_gold` -- te same wersje rozwinięte, tylko późniejsze etapy trenowane na
+  prawdziwych wejściach; w tabeli porównań osobne wiersze. Log 24.11 (generative QA, etap 2):
+  29531 pytań z prawdziwych argumentów, z predykcji etapu 1 22262 identycznych (pominięte),
+  4837 niedokładnych, 625 bez dopasowania. SL: trening na przewidzianych triggerach już
+  porównany (22.11 złote -> 24.11 przewidziane: argumenty test 68,3 -> 72,6).
 - LLM, wersja dwuetapowa (sprawdzona 27.11, odrzucona 28.11; kod w commicie 09c4a81,
   wycofany w następnym): etap 1 -- zdarzenia z typem, triggerem, subject, treatment,
   effect; etap 2 -- jedno wywołanie na zdarzenie: zdanie + zdarzenie -> 12 podargumentów.

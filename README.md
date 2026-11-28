@@ -130,6 +130,7 @@ Sun i in., wersja rozwinięta, test z 50 zdaniami), potem metody trenowane (grup
 | `llm_pool50` | `qwen3_8b_pool50`: 5-shot, przykłady z 50 losowych zdań (inne 50 dla każdego seeda) |
 | `baselines` | `seq/authors_baseline`, `eqa/authors_baseline`, `gqa/authors_baseline` |
 | `improved` | `seq/own_crf`, `eqa/own_current_predicted`, `gqa/own_current_combined` |
+| `train_inputs` | `eqa/own_current_gold`, `gqa/own_current_gold`: wersje rozwinięte QA z późniejszymi etapami trenowanymi na prawdziwych wejściach -- czy trening na predykcjach pomaga (od 28.11 w `run_plan.sh`) |
 
 ### 6. Sprawdzenie wyników trybu testowego
 

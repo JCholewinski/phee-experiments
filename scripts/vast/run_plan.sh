@@ -43,13 +43,14 @@ else
   status=1
 fi
 
-# 2. trained methods: the authors' baselines and the improved versions
-python scripts/run_matrix.py --groups baselines improved --seeds "${seeds[@]}" || status=1
+# 2. trained methods: the authors' baselines, the improved versions and the improved QA
+#    versions trained on gold inputs (does training on predicted inputs help?)
+python scripts/run_matrix.py --groups baselines improved train_inputs --seeds "${seeds[@]}" || status=1
 
 # 3. tables (all finished runs, every seed) and the list of runs
 echo "##### $(date '+%F %T') tables"
 python scripts/aggregate_results.py --gpu_price "$GPU_PRICE" || status=1
-python scripts/run_matrix.py --groups llm llm_pool50 baselines improved --seeds 1 2 3 --list
+python scripts/run_matrix.py --groups llm llm_pool50 baselines improved train_inputs --seeds 1 2 3 --list
 
 if (( status )); then
   echo "##### finished WITH ERRORS (see FAILED runs above and results/tables/checks.md)"

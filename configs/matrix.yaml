@@ -38,17 +38,20 @@ groups:
       - configs/seq/own_crf_nearest.yaml        # ablation: nearest-trigger rule instead of [TRG] tagging
       - configs/seq/own_linear.yaml
       - configs/seq/own_mlp.yaml
+  train_inputs:                  # decision 28.11: does training on predicted inputs help? (in run_plan.sh)
+    seeds: [1, 2, 3]             # the improved versions, but later stages trained on gold inputs
+    configs:
+      - configs/eqa/own_current_gold.yaml
+      - configs/gqa/own_current_gold.yaml
   extra_eqa_variants:
     seeds: [1, 2, 3]
     configs:
-      - configs/eqa/own_current_gold.yaml
       - configs/eqa/own_authors_predicted.yaml
       - configs/eqa/own_definitions_predicted.yaml
   extra_gqa_variants:
     seeds: [1, 2, 3]
     configs:
       - configs/gqa/own_current_predicted.yaml   # stage 2 on predicted inputs only (improved version until 24.11)
-      - configs/gqa/own_current_gold.yaml
       - configs/gqa/own_authors_predicted.yaml
       - configs/gqa/own_definitions_predicted.yaml
   extra_llm:
@@ -68,6 +71,12 @@ comparison:
     b: {experiment: eqa__own_current_predicted}
   - method: Generative QA
     a: {experiment: gqa__authors_baseline}
+    b: {experiment: gqa__own_current_combined, variant: decoding=constrained}
+  - method: "Extractive QA, improved: training on gold -> predicted inputs"
+    a: {experiment: eqa__own_current_gold}
+    b: {experiment: eqa__own_current_predicted}
+  - method: "Generative QA, improved: training on gold -> combined inputs"
+    a: {experiment: gqa__own_current_gold, variant: decoding=constrained}
     b: {experiment: gqa__own_current_combined, variant: decoding=constrained}
   - method: LLM, 0-shot
     a: {experiment: llm__qwen3_8b_authors_prompt, variant: shots=0}
